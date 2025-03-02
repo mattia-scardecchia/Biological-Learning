@@ -1,0 +1,7 @@
+- proofread with a fresh mind
+    - state resets?
+    - local field computation?
+    - copy/reference?
+- check magnitude of each field contribution and normalize where needed
+- debug perceptron rule and check it works as expected
+- check everything is right with the new MLP readout
