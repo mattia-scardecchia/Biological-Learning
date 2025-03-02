@@ -81,6 +81,7 @@ class Classifier:
         self.initialize_state(rng)
         self.initialize_couplings(rng)
         self.activations = [sign for _ in range(self.num_layers)] + [theta]
+        # self.activations = [sign for _ in range(self.num_layers + 1)]
 
     def initialize_state(self, rng: Optional[np.random.Generator] = None):
         """Initializes the state of the network."""
@@ -129,7 +130,7 @@ class Classifier:
         if layer_idx == self.num_layers:
             if y is None:
                 return 0
-            return self.lambda_y * y[neuron_idx]
+            return self.lambda_y * sign(y[neuron_idx])  # NOTE: assume y is one-hot
         return self.lambda_right * self.layers[layer_idx + 1][neuron_idx]
 
     def local_field(
@@ -189,6 +190,7 @@ class Classifier:
         :param threshold: stability threshold.
         :param x: input.
         """
+        count = 0
         for layer_idx in range(self.num_layers):
             for neuron_idx in range(self.N):
                 local_field = self.local_field(
@@ -197,10 +199,12 @@ class Classifier:
                 local_state = self.layers[layer_idx][neuron_idx]
                 if local_field * local_state > threshold:
                     continue
+                count += 1
                 self.couplings[layer_idx][neuron_idx, :] += (
                     lr * local_state * self.layers[layer_idx][:]
                 )  # NOTE: this does not interfere with the local field computation in subsequent updates within the same sweep
                 self.couplings[layer_idx][neuron_idx, neuron_idx] = self.J_D
+        return count
 
     def train_step(
         self,
@@ -219,10 +223,11 @@ class Classifier:
         """
         rng = np.random.default_rng() if rng is None else rng
         self.initialize_state(rng)
-        steps = self.relax(max_steps, x, y, rng)
-        if steps == max_steps:
+        num_sweeps = self.relax(max_steps, x, y, rng)
+        if num_sweeps == max_steps:
             logging.warning(f"Did not detect convergence in {max_steps} full sweeps.")
-        self.apply_perceptron_rule(lr, threshold, x)
+        updated_count = self.apply_perceptron_rule(lr, threshold, x)
+        return num_sweeps, updated_count
 
     def inference(
         self,
@@ -301,8 +306,14 @@ class Classifier:
         """Trains the network for one epoch."""
         rng = np.random.default_rng() if rng is None else rng
         perm = rng.permutation(inputs.shape[0])
+        sweep_nums, updates_counts = [], []
         for i in perm:
-            self.train_step(inputs[i], targets[i], max_steps, lr, threshold, rng)
+            num_sweeps, updated_count = self.train_step(
+                inputs[i], targets[i], max_steps, lr, threshold, rng
+            )
+            sweep_nums.append(num_sweeps)
+            updates_counts.append(updated_count)
+        return sweep_nums, updates_counts
 
     def train_loop(
         self,
@@ -318,14 +329,18 @@ class Classifier:
         :param num_epochs: number of epochs.
         """
         for epoch in range(num_epochs):
-            self.train_epoch(inputs, targets, max_steps, lr, threshold, rng)
+            sweep_nums, update_counts = self.train_epoch(
+                inputs, targets, max_steps, lr, threshold, rng
+            )
             metrics = self.evaluate(inputs, targets, max_steps, rng)
             logging.info(
-                f"Epoch {epoch + 1}/{num_epochs}: "
-                f"accuracy: {metrics['overall_accuracy']:.3f}, "
+                f"Epoch {epoch + 1}/{num_epochs}:\n"
+                f"train accuracy: {metrics['overall_accuracy']:.3f}\n"
+                f"Average number of full sweeps: {np.mean(sweep_nums):.3f}\n"
+                f"Average fraction of perceptron rule updates per full sweep: {np.mean(update_counts) / (self.num_layers * self.N + self.C):.3f}\n"
             )
 
-    def plot_fields_histograms(self):
+    def plot_fields_histograms(self, x=None, y=None):
         """
         Plots histograms of the various field types (internal, left, right)
         at each layer. \\
@@ -334,18 +349,18 @@ class Classifier:
         """
         total_layers = self.num_layers + 1
         n_cols = math.ceil(total_layers / 2)
-        fig, axs = plt.subplots(2, n_cols, figsize=(5 * n_cols, 8))
-        axs = axs.flatten()
+        fig1, axs1 = plt.subplots(2, n_cols, figsize=(5 * n_cols, 8))
+        fig2, axs2 = plt.subplots(2, n_cols, figsize=(5 * n_cols, 8))
+        axs1, axs2 = axs1.flatten(), axs2.flatten()
 
         for layer_idx in range(total_layers):
-            internal = []
-            left = []
-            right = []
+            internal, left, right, total = [], [], [], []
             for neuron_idx in range(len(self.layers[layer_idx])):
                 internal.append(self.internal_field(layer_idx, neuron_idx))
-                left.append(self.left_field(layer_idx, neuron_idx))
-                right.append(self.right_field(layer_idx, neuron_idx))
-            ax = axs[layer_idx]
+                left.append(self.left_field(layer_idx, neuron_idx, x))
+                right.append(self.right_field(layer_idx, neuron_idx, y))
+                total.append(internal[-1] + left[-1] + right[-1])
+            ax = axs1[layer_idx]
             ax.hist(internal, bins=30, alpha=0.6, label="Internal", color="blue")
             ax.hist(left, bins=30, alpha=0.6, label="Left", color="green")
             ax.hist(right, bins=30, alpha=0.6, label="Right", color="red")
@@ -353,8 +368,16 @@ class Classifier:
                 f"Layer {layer_idx}" if layer_idx < self.num_layers else "Readout"
             )
             ax.legend()
+            ax = axs2[layer_idx]
+            ax.hist(total, bins=30, alpha=0.6, label="Total", color="black")
+            ax.set_title(
+                f"Layer {layer_idx}" if layer_idx < self.num_layers else "Readout"
+            )
+            ax.legend()
 
-        for j in range(total_layers, len(axs)):
-            axs[j].axis("off")
-        fig.tight_layout()
-        return fig
+        for j in range(total_layers, len(axs1)):
+            axs1[j].axis("off")
+            axs2[j].axis("off")
+        fig1.tight_layout(rect=(0, 0, 1, 0.97))
+        fig2.tight_layout(rect=(0, 0, 1, 0.97))
+        return fig1, fig2

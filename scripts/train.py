@@ -55,9 +55,13 @@ def main(cfg):
         rng,
     )
 
-    fig = model.plot_fields_histograms()
-    fig.savefig(os.path.join(output_dir, "fields_histograms.png"))
-    plt.close(fig)
+    fig1, fig2 = model.plot_fields_histograms(x=inputs[0], y=targets[0])
+    fig1.suptitle("Fields Breakdown at Initialization, with external fields")
+    fig1.savefig(os.path.join(output_dir, "fields_breakdown.png"))
+    plt.close(fig1)
+    fig2.suptitle("Total Field at Initialization, with external fields")
+    fig2.savefig(os.path.join(output_dir, "total_field.png"))
+    plt.close(fig2)
 
     # ================== Training ==================
     model.train_loop(
