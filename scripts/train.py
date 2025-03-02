@@ -53,6 +53,7 @@ def main(cfg):
         cfg.lambda_y,
         cfg.J_D,
         rng,
+        sparse_readout=cfg.sparse_readout,
     )
 
     fig1, fig2 = model.plot_fields_histograms(x=inputs[0], y=targets[0])

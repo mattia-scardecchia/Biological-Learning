@@ -1,6 +1,0 @@
-- proofread with a fresh mind
-    - state resets?
-    - local field computation?
-    - copy/reference?
-- debug perceptron rule and check it works as expected
-- check everything is right with the new MLP readout

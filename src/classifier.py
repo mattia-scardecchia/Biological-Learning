@@ -14,9 +14,14 @@ def initialize_state(N: int, rng: Optional[np.random.Generator] = None):
     return S
 
 
-def initialize_readout_state(C: int, rng: Optional[np.random.Generator] = None):
+def initialize_readout_state(
+    C: int, rng: Optional[np.random.Generator] = None, sparse: bool = False
+):
     rng = np.random.default_rng() if rng is None else rng
-    return np.zeros((C,), dtype=DTYPE)
+    if sparse:
+        return np.zeros((C,), dtype=DTYPE)
+    else:
+        return np.array(rng.choice([-1, 1], size=(C,)), dtype=DTYPE)
 
 
 def initialize_couplings(N: int, J_D: float, rng: Optional[np.random.Generator] = None):
@@ -56,6 +61,7 @@ class Classifier:
         lambda_y: float,
         J_D: float,
         rng: Optional[np.random.Generator] = None,
+        sparse_readout: bool = True,
     ):
         """Initializes the classifier.
         :param num_layers: number of layers.
@@ -76,12 +82,15 @@ class Classifier:
         self.lambda_x = lambda_x
         self.lambda_y = lambda_y
         self.J_D = J_D
+        self.sparse_readout = sparse_readout
 
         rng = np.random.default_rng() if rng is None else rng
         self.initialize_state(rng)
         self.initialize_couplings(rng)
-        self.activations = [sign for _ in range(self.num_layers)] + [theta]
-        # self.activations = [sign for _ in range(self.num_layers + 1)]
+        if sparse_readout:
+            self.activations = [sign for _ in range(self.num_layers)] + [theta]
+        else:
+            self.activations = [sign for _ in range(self.num_layers + 1)]
 
     def initialize_state(
         self, rng: Optional[np.random.Generator] = None, x: Optional[np.ndarray] = None
@@ -96,7 +105,7 @@ class Classifier:
                 initialize_state(self.N, rng) for _ in range(self.num_layers)
             ]
         self.layers.append(
-            initialize_readout_state(self.C, rng)
+            initialize_readout_state(self.C, rng, sparse=self.sparse_readout)
         )  # num_layers + 1, N (layers[-1] is the readout layer)
 
     def initialize_couplings(self, rng: Optional[np.random.Generator] = None):
@@ -132,9 +141,8 @@ class Classifier:
     ):
         """Field due to interaction with next layer, or with right external field."""
         if layer_idx == self.num_layers - 1:
-            return np.dot(
-                self.W[:, neuron_idx], self.layers[self.num_layers]
-            )  # NOTE: no multiplier because readout is sparse (?)
+            prod = np.dot(self.W[:, neuron_idx], self.layers[self.num_layers])
+            return prod / np.sqrt(self.C) if not self.sparse_readout else prod
         if layer_idx == self.num_layers:
             if y is None:
                 return 0
