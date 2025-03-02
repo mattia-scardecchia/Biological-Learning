@@ -147,9 +147,9 @@ class Classifier:
 
     def relax(
         self,
-        x: np.ndarray,
-        y: np.ndarray,
         max_steps: int,
+        x: np.ndarray,
+        y: Optional[np.ndarray] = None,
         rng: Optional[np.random.Generator] = None,
     ):
         """Relaxes the network to a stable state. \\
@@ -211,25 +211,108 @@ class Classifier:
         """
         rng = np.random.default_rng() if rng is None else rng
         self.initialize_state(rng)
-        steps = self.relax(x, y, max_steps, rng)
+        steps = self.relax(max_steps, x, y, rng)
         if steps == max_steps:
             logging.warning(f"Did not detect convergence in {max_steps} full sweeps.")
         self.apply_perceptron_rule(lr, threshold, x)
 
-    def inference(self, x: np.ndarray, repeat: int = 1):
+    def inference(
+        self,
+        inputs: np.ndarray,
+        max_steps: int,
+        rng: Optional[np.random.Generator] = None,
+        repeat: int = 1,
+    ):
         """Performs inference with the network.
-        :param x: input.
         :param repeat: do inference independently multiple times.
-        :return: the prediction as an array of shape [repeat, num_classes].
+        :return: the prediction as an array of shape [repeat, num_inputs, num_classes].
         """
-        pass
+        rng = np.random.default_rng() if rng is None else rng
+        predictions = np.zeros((repeat, inputs.shape[0], self.C), dtype=DTYPE)
+        for i in range(repeat):
+            for j, x in enumerate(inputs):
+                self.initialize_state(rng)
+                self.relax(max_steps, x, None, rng)
+                predictions[i, j, :] = self.layers[-1].copy()
+        return predictions
 
-    def train_epoch(self):
+    def evaluate(
+        self,
+        inputs: np.ndarray,
+        targets: np.ndarray,
+        max_steps: int,
+        rng: Optional[np.random.Generator] = None,
+        repeat: int = 1,
+    ):
+        """
+        Evaluates the network on a dataset. Compute overall accuracy and per-class accuracy,
+        both for individual predictions and through majority voting. \\
+        :return: a dictionary with the following keys:
+        - overall_accuracy: float,
+        - majority_accuracy: float,
+        - accuracy_by_class: dict,            # keys: class index, value: accuracy
+        - majority_accuracy_by_class: dict,   # keys: class index, value: accuracy
+        """
+        predictions = self.inference(inputs, max_steps, rng, repeat)
+        _, num_inputs, num_classes = predictions.shape
+        predicted_individual = np.argmax(predictions, axis=2)  # repeat, num_inputs
+        ground_truth = np.argmax(targets, axis=1)  # num_inputs,
+        majority_votes = np.empty(num_inputs, dtype=np.int64)  # num_inputs,
+        for j in range(num_inputs):
+            counts = np.bincount(predicted_individual[:, j], minlength=num_classes)
+            majority_votes[j] = np.argmax(counts)
+
+        acc = (predicted_individual == ground_truth[None, :]).mean()
+        majority_acc = (majority_votes == ground_truth).mean()
+        acc_by_class = {}
+        majority_acc_by_class = {}
+        for cls in range(num_classes):
+            cls_indices = np.where(ground_truth == cls)[0]
+            if len(cls_indices) == 0:
+                acc_by_class[cls] = None
+                majority_acc_by_class[cls] = None
+                continue
+            acc_by_class[cls] = (predicted_individual[:, cls_indices] == cls).mean()
+            majority_acc_by_class[cls] = (majority_votes[cls_indices] == cls).mean()
+        return {
+            "overall_accuracy": acc,
+            "majority_accuracy": majority_acc,
+            "accuracy_by_class": acc_by_class,
+            "majority_accuracy_by_class": majority_acc_by_class,
+        }
+
+    def train_epoch(
+        self,
+        inputs: np.ndarray,
+        targets: np.ndarray,
+        max_steps: int,
+        lr: float,
+        threshold: float,
+        rng: Optional[np.random.Generator] = None,
+    ):
         """Trains the network for one epoch."""
-        pass
+        rng = np.random.default_rng() if rng is None else rng
+        perm = rng.permutation(inputs.shape[0])
+        for i in perm:
+            self.train_step(inputs[i], targets[i], max_steps, lr, threshold, rng)
 
-    def train_loop(self, num_epochs: int):
+    def train_loop(
+        self,
+        num_epochs: int,
+        inputs: np.ndarray,
+        targets: np.ndarray,
+        max_steps: int,
+        lr: float,
+        threshold: float,
+        rng: Optional[np.random.Generator] = None,
+    ):
         """Trains the network for multiple epochs.
         :param num_epochs: number of epochs.
         """
-        pass
+        for epoch in range(num_epochs):
+            self.train_epoch(inputs, targets, max_steps, lr, threshold, rng)
+            metrics = self.evaluate(inputs, targets, max_steps, rng)
+            logging.info(
+                f"Epoch {epoch + 1}/{num_epochs}: "
+                f"accuracy: {metrics['overall_accuracy']:.3f}, "
+            )

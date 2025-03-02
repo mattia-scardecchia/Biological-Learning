@@ -1,0 +1,26 @@
+defaults:
+  - /base@_here_
+  - _self_
+
+name: 'prova'
+seed: 42
+
+N: 500
+num_layers: 5
+J_D: 0.2
+
+lambda_left: 2.0
+lambda_right: 2.0
+lambda_x: 5.0
+lambda_y: 5.0
+
+num_epochs: 5
+max_steps: 50  # full sweeps over the network (relaxation)
+lr: 0.001
+threshold: 0.6
+
+data:
+  C: 10
+  P: 10
+  p: 0.1
+  save_dir: 'data'
