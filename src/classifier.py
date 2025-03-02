@@ -1,7 +1,9 @@
 import logging
+import math
 from typing import Optional
 
 import numpy as np
+from matplotlib import pyplot as plt
 
 DTYPE = np.float32
 
@@ -30,6 +32,14 @@ def initialize_readout_couplings(
     rng = np.random.default_rng() if rng is None else rng
     W = np.array(rng.choice([-1, 1], size=(C, N)), dtype=DTYPE)
     return W
+
+
+def sign(x: float):
+    return 2 * int(x > 0) - 1
+
+
+def theta(x: float):
+    return int(x > 0)
 
 
 class Classifier:
@@ -70,9 +80,7 @@ class Classifier:
         rng = np.random.default_rng() if rng is None else rng
         self.initialize_state(rng)
         self.initialize_couplings(rng)
-        self.activations = [np.sign for _ in range(self.num_layers)] + [
-            lambda x: int(x > 0)
-        ]
+        self.activations = [sign for _ in range(self.num_layers)] + [theta]
 
     def initialize_state(self, rng: Optional[np.random.Generator] = None):
         """Initializes the state of the network."""
@@ -107,7 +115,7 @@ class Classifier:
         if layer_idx == self.num_layers:
             return np.dot(
                 self.W[neuron_idx, :], self.layers[self.num_layers - 1]
-            )  # TODO: multiplier?
+            ) / np.sqrt(self.N)
         return self.lambda_left * self.layers[layer_idx - 1][neuron_idx]
 
     def right_field(
@@ -117,7 +125,7 @@ class Classifier:
         if layer_idx == self.num_layers - 1:
             return np.dot(
                 self.W[:, neuron_idx], self.layers[self.num_layers]
-            )  # TODO: multiplier?
+            )  # NOTE: no multiplier because readout is sparse (?)
         if layer_idx == self.num_layers:
             if y is None:
                 return 0
@@ -316,3 +324,37 @@ class Classifier:
                 f"Epoch {epoch + 1}/{num_epochs}: "
                 f"accuracy: {metrics['overall_accuracy']:.3f}, "
             )
+
+    def plot_fields_histograms(self):
+        """
+        Plots histograms of the various field types (internal, left, right)
+        at each layer. \\
+        The plot is arranged in two rows of subplots, one per layer (including
+        readout); in each subplot, the three histograms are overlaid.
+        """
+        total_layers = self.num_layers + 1
+        n_cols = math.ceil(total_layers / 2)
+        fig, axs = plt.subplots(2, n_cols, figsize=(5 * n_cols, 8))
+        axs = axs.flatten()
+
+        for layer_idx in range(total_layers):
+            internal = []
+            left = []
+            right = []
+            for neuron_idx in range(len(self.layers[layer_idx])):
+                internal.append(self.internal_field(layer_idx, neuron_idx))
+                left.append(self.left_field(layer_idx, neuron_idx))
+                right.append(self.right_field(layer_idx, neuron_idx))
+            ax = axs[layer_idx]
+            ax.hist(internal, bins=30, alpha=0.6, label="Internal", color="blue")
+            ax.hist(left, bins=30, alpha=0.6, label="Left", color="green")
+            ax.hist(right, bins=30, alpha=0.6, label="Right", color="red")
+            ax.set_title(
+                f"Layer {layer_idx}" if layer_idx < self.num_layers else "Readout"
+            )
+            ax.legend()
+
+        for j in range(total_layers, len(axs)):
+            axs[j].axis("off")
+        fig.tight_layout()
+        return fig

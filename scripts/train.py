@@ -3,6 +3,7 @@ import os
 import hydra
 import numpy as np
 from hydra.core.hydra_config import HydraConfig
+from matplotlib import pyplot as plt
 
 from src.classifier import Classifier
 from src.data import get_balanced_dataset
@@ -53,6 +54,10 @@ def main(cfg):
         cfg.J_D,
         rng,
     )
+
+    fig = model.plot_fields_histograms()
+    fig.savefig(os.path.join(output_dir, "fields_histograms.png"))
+    plt.close(fig)
 
     # ================== Training ==================
     model.train_loop(
