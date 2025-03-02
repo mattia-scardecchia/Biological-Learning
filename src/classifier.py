@@ -83,10 +83,18 @@ class Classifier:
         self.activations = [sign for _ in range(self.num_layers)] + [theta]
         # self.activations = [sign for _ in range(self.num_layers + 1)]
 
-    def initialize_state(self, rng: Optional[np.random.Generator] = None):
-        """Initializes the state of the network."""
+    def initialize_state(
+        self, rng: Optional[np.random.Generator] = None, x: Optional[np.ndarray] = None
+    ):
+        """Initializes the state of the network. If x is provided, initialize all
+        non-readout layers to x. Otherwise, sample."""
         rng = np.random.default_rng() if rng is None else rng
-        self.layers = [initialize_state(self.N, rng) for _ in range(self.num_layers)]
+        if x is not None:
+            self.layers = [x.copy() for _ in range(self.num_layers)]
+        else:
+            self.layers = [
+                initialize_state(self.N, rng) for _ in range(self.num_layers)
+            ]
         self.layers.append(
             initialize_readout_state(self.C, rng)
         )  # num_layers + 1, N (layers[-1] is the readout layer)
@@ -222,7 +230,7 @@ class Classifier:
         :param threshold: stability threshold.
         """
         rng = np.random.default_rng() if rng is None else rng
-        self.initialize_state(rng)
+        self.initialize_state(rng, x)
         num_sweeps = self.relax(max_steps, x, y, rng)
         if num_sweeps == max_steps:
             logging.warning(f"Did not detect convergence in {max_steps} full sweeps.")
@@ -244,7 +252,7 @@ class Classifier:
         predictions = np.zeros((repeat, inputs.shape[0], self.C), dtype=DTYPE)
         for i in range(repeat):
             for j, x in enumerate(inputs):
-                self.initialize_state(rng)
+                self.initialize_state(rng, x)
                 self.relax(max_steps, x, None, rng)
                 predictions[i, j, :] = self.layers[-1].copy()
         return predictions
