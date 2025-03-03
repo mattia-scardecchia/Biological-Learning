@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import hydra
 import numpy as np
@@ -66,6 +67,7 @@ def main(cfg):
     plt.close(fig2)
 
     # ================== Training ==================
+    t0 = time.time()
     acc_history = model.train_loop(
         cfg.num_epochs,
         inputs,
@@ -75,10 +77,13 @@ def main(cfg):
         cfg.threshold,
         rng,
     )
+    t1 = time.time()
+    logging.info(f"Training took {t1 - t0:.2f} seconds")
 
     metrics = model.evaluate(test_inputs, test_targets, cfg.max_steps, rng)
     logging.info(f"Test accuracy: {metrics['overall_accuracy']:.2f}")
-
+    t2 = time.time()
+    logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
 
 if __name__ == "__main__":
     main()

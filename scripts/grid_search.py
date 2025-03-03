@@ -13,8 +13,8 @@ from src.data import get_balanced_dataset
 HYPERPARAM_GRID = {
     "lr": [0.01, 0.003, 0.001, 0.0003, 0.0001],
     "threshold": [6.0, 5.0, 4.0, 3.0, 2.0],
-    "lambda_left": [4.0, 3.0, 2.0, 1.0, 0.5],
-    "lambda_x": [7.0, 6.0, 5.0, 4.0, 3.0],
+    "lambda_left": [4.0, 3.0, 2.0, 1.0],
+    "lambda_x": [7.0, 6.0, 5.0, 4.0],
 }
 
 
@@ -49,8 +49,10 @@ def main(cfg):
     )
 
     results = []
-
+    i = 0
     for values in itertools.product(*HYPERPARAM_GRID.values()):
+        i += 1
+        logging.info(f"Starting iteration {i}")
         hyperparams = dict(zip(HYPERPARAM_GRID.keys(), values))
         hyperparams["lambda_right"] = hyperparams["lambda_left"]
         hyperparams["lambda_y"] = hyperparams["lambda_x"]
