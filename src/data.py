@@ -35,12 +35,19 @@ def dump_balanced_dataset(inputs, targets, metadata, save_dir: str, class_protot
 
 
 def generate_balanced_dataset(
-    N: int, P: int, C: int, p: float, rng: np.random.Generator
+    N: int,
+    P: int,
+    C: int,
+    p: float,
+    rng: np.random.Generator,
+    prototypes: Optional[np.ndarray],
 ):
     """Generates a balanced dataset with P*C patterns and C classes. Sample C N-dimensional
     binary (+/- 1) class prototypes and flip a fraction p of their bits P times to generate
     the patterns."""
-    class_prototypes = rng.choice([-1, 1], size=(C, N))
+    class_prototypes = (
+        prototypes if prototypes is not None else rng.choice([-1, 1], size=(C, N))
+    )
     inputs = np.zeros((P * C, N), dtype=np.int8)
     for c in range(C):
         inputs[c * P : (c + 1) * P] = class_prototypes[c]
@@ -57,6 +64,7 @@ def get_balanced_dataset(
     C: int,
     p: float,
     save_dir: str,
+    prototypes: Optional[np.ndarray] = None,
     rng: Optional[np.random.Generator] = None,
     shuffle: bool = True,
     load_if_available: bool = True,
@@ -71,9 +79,10 @@ def get_balanced_dataset(
     :param P: number of patterns per class. \\
     :param C: number of classes. \\
     :param p: probability of flipping a bit from class prototypes. \\
+    :param prototypes: if not None, use these prototypes instead of generating new ones. \\
     :param save_dir: directory to save the dataset. \\
-    :param load_if_available: if True, load the dataset from save_dir if metadata match.
-    :param dump: if True, dump the dataset to save_dir. \\
+    :param load_if_available: if True, load the dataset from save_dir if metadata (and prototypes) match. \\
+    :param dump: if True, dump the dataset to save_dir.
     """
     if load_if_available and os.path.exists(save_dir):
         inputs, targets, metadata, class_prototypes = load_balanced_dataset(save_dir)
@@ -82,12 +91,13 @@ def get_balanced_dataset(
             and metadata["P"] == P
             and metadata["C"] == C
             and metadata["p"] == p
+            and (prototypes is None or np.array_equal(class_prototypes, prototypes))
         ):
             return inputs, targets, metadata, class_prototypes
 
     rng = np.random.default_rng() if rng is None else rng
     inputs, targets, metadata, class_prototypes = generate_balanced_dataset(
-        N, P, C, p, rng
+        N, P, C, p, rng, prototypes
     )
     if shuffle:
         indices = rng.permutation(P * C)
