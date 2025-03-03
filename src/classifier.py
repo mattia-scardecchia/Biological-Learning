@@ -339,25 +339,37 @@ class Classifier:
         max_steps: int,
         lr: float,
         threshold: float,
+        eval_interval: Optional[int] = None,  # epochs
+        eval_inputs: Optional[np.ndarray] = None,
+        eval_targets: Optional[np.ndarray] = None,
         rng: Optional[np.random.Generator] = None,
     ):
         """Trains the network for multiple epochs.
         :param num_epochs: number of epochs.
         """
-        acc_history = []
+        if eval_interval is None:
+            eval_interval = num_epochs + 1  # never evaluate
+        train_acc_history, eval_acc_history = [], []
         for epoch in range(num_epochs):
             sweep_nums, update_counts = self.train_epoch(
                 inputs, targets, max_steps, lr, threshold, rng
             )
-            metrics = self.evaluate(inputs, targets, max_steps, rng)
+            train_metrics = self.evaluate(inputs, targets, max_steps, rng)
             logging.info(
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
-                f"train accuracy: {metrics['overall_accuracy']:.3f}\n"
+                f"train accuracy: {train_metrics['overall_accuracy']:.3f}\n"
                 f"Average number of full sweeps: {np.mean(sweep_nums):.3f}\n"
                 f"Average fraction of perceptron rule updates per full sweep: {np.mean(update_counts) / (self.num_layers * self.N + self.C):.3f}\n"
             )
-            acc_history.append(metrics["overall_accuracy"])
-        return acc_history
+            train_acc_history.append(train_metrics["overall_accuracy"])
+            if (epoch + 1) % eval_interval == 0:
+                assert eval_inputs is not None and eval_targets is not None
+                eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps, rng)
+                logging.info(
+                    f"Validation accuracy: {eval_metrics['overall_accuracy']:.3f}\n"
+                )
+                eval_acc_history.append(eval_metrics["overall_accuracy"])
+        return train_acc_history, eval_acc_history
 
     def plot_fields_histograms(self, x=None, y=None):
         """

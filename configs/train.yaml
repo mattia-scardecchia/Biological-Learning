@@ -25,3 +25,5 @@ data:
   P: 10
   p: 0.1
   save_dir: 'data'
+
+eval_interval: 1

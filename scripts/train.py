@@ -30,7 +30,7 @@ def main(cfg):
         load_if_available=True,
         dump=True,
     )
-    test_inputs, test_targets, test_metadata, test_class_prototypes = (
+    eval_inputs, eval_targets, eval_metadata, eval_class_prototypes = (
         get_balanced_dataset(
             cfg.N,
             cfg.data.P,
@@ -68,22 +68,26 @@ def main(cfg):
 
     # ================== Training ==================
     t0 = time.time()
-    acc_history = model.train_loop(
+    train_acc_history, eval_acc_history = model.train_loop(
         cfg.num_epochs,
         inputs,
         targets,
         cfg.max_steps,
         cfg.lr,
         cfg.threshold,
+        cfg.eval_interval,
+        eval_inputs,
+        eval_targets,
         rng,
     )
     t1 = time.time()
     logging.info(f"Training took {t1 - t0:.2f} seconds")
 
-    metrics = model.evaluate(test_inputs, test_targets, cfg.max_steps, rng)
-    logging.info(f"Test accuracy: {metrics['overall_accuracy']:.2f}")
+    metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps, rng)
+    logging.info(f"Final Eval Accuracy: {metrics['overall_accuracy']:.2f}")
     t2 = time.time()
     logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
+
 
 if __name__ == "__main__":
     main()
