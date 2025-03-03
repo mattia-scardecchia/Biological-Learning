@@ -1,5 +1,6 @@
 import logging
 import math
+from collections import defaultdict
 from typing import Optional
 
 import numpy as np
@@ -250,20 +251,20 @@ class Classifier:
         inputs: np.ndarray,
         max_steps: int,
         rng: Optional[np.random.Generator] = None,
-        repeat: int = 1,
     ):
         """Performs inference with the network.
-        :param repeat: do inference independently multiple times.
         :return: the prediction as an array of shape [repeat, num_inputs, num_classes].
         """
         rng = np.random.default_rng() if rng is None else rng
-        predictions = np.zeros((repeat, inputs.shape[0], self.C), dtype=DTYPE)
-        for i in range(repeat):
-            for j, x in enumerate(inputs):
-                self.initialize_state(rng, x)
-                self.relax(max_steps, x, None, rng)
-                predictions[i, j, :] = self.layers[-1].copy()
-        return predictions
+        predictions = np.zeros((inputs.shape[0], self.C), dtype=DTYPE)
+        fixed_points = defaultdict(list)
+        for j, x in enumerate(inputs):
+            self.initialize_state(rng, x)
+            self.relax(max_steps, x, None, rng)
+            predictions[j, :] = self.layers[-1].copy()
+            for layer_idx in range(self.num_layers + 1):
+                fixed_points[layer_idx].append(self.layers[layer_idx].copy())
+        return predictions, dict(fixed_points)
 
     def evaluate(
         self,
@@ -271,7 +272,6 @@ class Classifier:
         targets: np.ndarray,
         max_steps: int,
         rng: Optional[np.random.Generator] = None,
-        repeat: int = 1,
     ):
         """
         Evaluates the network on a dataset. Compute overall accuracy and per-class accuracy,
@@ -282,32 +282,19 @@ class Classifier:
         - accuracy_by_class: dict,            # keys: class index, value: accuracy
         - majority_accuracy_by_class: dict,   # keys: class index, value: accuracy
         """
-        predictions = self.inference(inputs, max_steps, rng, repeat)
-        _, num_inputs, num_classes = predictions.shape
-        predicted_individual = np.argmax(predictions, axis=2)  # repeat, num_inputs
+        predictions, fixed_points = self.inference(inputs, max_steps, rng)
+        predicted_individual = np.argmax(predictions, axis=1)  # num_inputs,
         ground_truth = np.argmax(targets, axis=1)  # num_inputs,
-        majority_votes = np.empty(num_inputs, dtype=np.int64)  # num_inputs,
-        for j in range(num_inputs):
-            counts = np.bincount(predicted_individual[:, j], minlength=num_classes)
-            majority_votes[j] = np.argmax(counts)
-
-        acc = (predicted_individual == ground_truth[None, :]).mean()
-        majority_acc = (majority_votes == ground_truth).mean()
+        acc = (predicted_individual == ground_truth).mean()
         acc_by_class = {}
-        majority_acc_by_class = {}
-        for cls in range(num_classes):
+        for cls in range(predictions.shape[1]):
             cls_indices = np.where(ground_truth == cls)[0]
-            if len(cls_indices) == 0:
-                acc_by_class[cls] = None
-                majority_acc_by_class[cls] = None
-                continue
-            acc_by_class[cls] = (predicted_individual[:, cls_indices] == cls).mean()
-            majority_acc_by_class[cls] = (majority_votes[cls_indices] == cls).mean()
+            acc_by_class[cls] = (predicted_individual[cls_indices] == cls).mean()
         return {
             "overall_accuracy": acc,
-            "majority_accuracy": majority_acc,
             "accuracy_by_class": acc_by_class,
-            "majority_accuracy_by_class": majority_acc_by_class,
+            "predictions": predictions,  # num_inputs, num_classes
+            "fixed_points": fixed_points,  # num_layers + 1, num_inputs, N
         }
 
     def train_epoch(

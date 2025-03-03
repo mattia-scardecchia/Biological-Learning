@@ -9,6 +9,10 @@ from matplotlib import pyplot as plt
 
 from src.classifier import Classifier
 from src.data import get_balanced_dataset
+from src.utils import (
+    plot_accuracy_by_class_barplot,
+    plot_fixed_points_similarity_heatmap,
+)
 
 
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
@@ -42,7 +46,7 @@ def main(cfg):
             test_data_dir,
             train_class_prototypes,
             rng,
-            shuffle=True,
+            shuffle=False,
             load_if_available=True,
             dump=True,
         )
@@ -87,10 +91,19 @@ def main(cfg):
     t1 = time.time()
     logging.info(f"Training took {t1 - t0:.2f} seconds")
 
-    metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps, rng)
-    logging.info(f"Final Eval Accuracy: {metrics['overall_accuracy']:.2f}")
+    eval_metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps, rng)
+    logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
     t2 = time.time()
     logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
+
+    # ================== Plotting ==================
+    fig = plot_fixed_points_similarity_heatmap(eval_metrics["fixed_points"])
+    plt.savefig(os.path.join(output_dir, "eval_representations_similarity.png"))
+    plt.close(fig)
+
+    fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
+    plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
+    plt.close(fig)
 
     logging.info("best train accuracy: {:.2f}".format(np.max(train_acc_history)))
     logging.info("best eval accuracy: {:.2f}".format(np.max(eval_acc_history)))
