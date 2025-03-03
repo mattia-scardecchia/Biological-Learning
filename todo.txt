@@ -1,0 +1,6 @@
+TODO:
+- improve logging:
+    - track the distribution of couplings (preferrably the whole histogram + asymmetricity, maybe once per epoch)
+
+- matrici J sparse (normalizza bene)
+- stati 0-1 (e sparsità)
