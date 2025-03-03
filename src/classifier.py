@@ -344,6 +344,7 @@ class Classifier:
         """Trains the network for multiple epochs.
         :param num_epochs: number of epochs.
         """
+        acc_history = []
         for epoch in range(num_epochs):
             sweep_nums, update_counts = self.train_epoch(
                 inputs, targets, max_steps, lr, threshold, rng
@@ -355,6 +356,8 @@ class Classifier:
                 f"Average number of full sweeps: {np.mean(sweep_nums):.3f}\n"
                 f"Average fraction of perceptron rule updates per full sweep: {np.mean(update_counts) / (self.num_layers * self.N + self.C):.3f}\n"
             )
+            acc_history.append(metrics["overall_accuracy"])
+        return acc_history
 
     def plot_fields_histograms(self, x=None, y=None):
         """

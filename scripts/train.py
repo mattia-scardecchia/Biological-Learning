@@ -1,3 +1,4 @@
+import logging
 import os
 
 import hydra
@@ -65,7 +66,7 @@ def main(cfg):
     plt.close(fig2)
 
     # ================== Training ==================
-    model.train_loop(
+    acc_history = model.train_loop(
         cfg.num_epochs,
         inputs,
         targets,
@@ -74,6 +75,9 @@ def main(cfg):
         cfg.threshold,
         rng,
     )
+
+    metrics = model.evaluate(test_inputs, test_targets, cfg.max_steps, rng)
+    logging.info(f"Test accuracy: {metrics['overall_accuracy']:.2f}")
 
 
 if __name__ == "__main__":
