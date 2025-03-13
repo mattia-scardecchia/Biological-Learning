@@ -256,15 +256,17 @@ class Classifier:
         :return: the prediction as an array of shape [repeat, num_inputs, num_classes].
         """
         rng = np.random.default_rng() if rng is None else rng
-        predictions = np.zeros((inputs.shape[0], self.C), dtype=DTYPE)
+        logits = np.zeros((inputs.shape[0], self.C), dtype=DTYPE)
         fixed_points = defaultdict(list)
         for j, x in enumerate(inputs):
             self.initialize_state(rng, x)
             self.relax(max_steps, x, None, rng)
-            predictions[j, :] = self.layers[-1].copy()
+            logits[j, :] = [
+                self.left_field(self.num_layers, i, x) for i in range(self.C)
+            ]
             for layer_idx in range(self.num_layers + 1):
                 fixed_points[layer_idx].append(self.layers[layer_idx].copy())
-        return predictions, dict(fixed_points)
+        return logits, dict(fixed_points)
 
     def evaluate(
         self,
@@ -282,7 +284,9 @@ class Classifier:
         - accuracy_by_class: dict,            # keys: class index, value: accuracy
         - majority_accuracy_by_class: dict,   # keys: class index, value: accuracy
         """
-        predictions, fixed_points = self.inference(inputs, max_steps, rng)
+        logits, fixed_points = self.inference(inputs, max_steps, rng)
+        predictions = np.zeros_like(logits)
+        predictions[np.arange(inputs.shape[0]), np.argmax(logits, axis=1)] = 1
         predicted_individual = np.argmax(predictions, axis=1)  # num_inputs,
         ground_truth = np.argmax(targets, axis=1)  # num_inputs,
         acc = (predicted_individual == ground_truth).mean()
@@ -293,6 +297,7 @@ class Classifier:
         return {
             "overall_accuracy": acc,
             "accuracy_by_class": acc_by_class,
+            "logits": logits,  # num_inputs, num_classes
             "predictions": predictions,  # num_inputs, num_classes
             "fixed_points": fixed_points,  # num_layers + 1, num_inputs, N
         }

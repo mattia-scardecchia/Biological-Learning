@@ -38,5 +38,6 @@ def plot_accuracy_by_class_barplot(accuracy_by_class: Dict[int, float]):
     ax.bar(list(accuracy_by_class.keys()), list(accuracy_by_class.values()))
     ax.set_xlabel("Class")
     ax.set_ylabel("Accuracy")
-    ax.set_title("Accuracy by class")
+    global_avg = np.mean(list(accuracy_by_class.values()))
+    ax.set_title(f"Accuracy by class (Global Avg: {global_avg:.2f})")
     return fig
