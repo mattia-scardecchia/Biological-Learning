@@ -46,7 +46,9 @@ def generate_balanced_dataset(
     binary (+/- 1) class prototypes and flip a fraction p of their bits P times to generate
     the patterns."""
     class_prototypes = (
-        prototypes if prototypes is not None else rng.choice([-1, 1], size=(C, N))
+        prototypes.copy()
+        if prototypes is not None
+        else rng.choice([-1, 1], size=(C, N))
     )
     inputs = np.zeros((P * C, N), dtype=np.int8)
     for c in range(C):
