@@ -37,7 +37,7 @@ def main(cfg):
         load_if_available=True,
         dump=True,
     )
-    test_inputs, test_targets, _, _ = get_balanced_dataset(
+    eval_inputs, eval_targets, _, _ = get_balanced_dataset(
         cfg.N,
         cfg.data.P,
         cfg.data.C,
@@ -79,11 +79,14 @@ def main(cfg):
             cfg.max_steps,
             hyperparams["lr"],
             hyperparams["threshold"],
+            cfg.eval_interval,
+            eval_inputs,
+            eval_targets,
             rng,
         )
 
         max_train_acc = max(acc_history) if acc_history else 0.0
-        metrics = model.evaluate(test_inputs, test_targets, cfg.max_steps, rng)
+        metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps, rng)
         test_accuracy = metrics["overall_accuracy"]
         logging.info(f"Test accuracy: {test_accuracy:.2f}\n")
         results.append(
