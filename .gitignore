@@ -5,3 +5,5 @@ __pycache__/
 outputs/
 multirun/
 data/
+checkpoints/
+logs/
