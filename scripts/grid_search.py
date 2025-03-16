@@ -25,12 +25,13 @@ def main(cfg):
     test_data_dir = os.path.join(cfg.data.save_dir, "test")
 
     rng = np.random.default_rng(cfg.seed)
-    inputs, targets, _, _ = get_balanced_dataset(
+    inputs, targets, metadata, prototypes = get_balanced_dataset(
         cfg.N,
         cfg.data.P,
         cfg.data.C,
         cfg.data.p,
         train_data_dir,
+        None,
         rng,
         shuffle=True,
         load_if_available=True,
@@ -42,6 +43,7 @@ def main(cfg):
         cfg.data.C,
         cfg.data.p,
         test_data_dir,
+        prototypes,
         rng,
         shuffle=True,
         load_if_available=True,
