@@ -10,11 +10,25 @@ from hydra.core.hydra_config import HydraConfig
 from src.classifier import Classifier
 from src.data import get_balanced_dataset
 
+"""
+TODO: debug!
+
+Error executing job with overrides: ['name=grid', 'seed=4']
+Traceback (most recent call last):
+  File "/home/3144860/Biological-Learning/scripts/grid_search.py", line 96, in main
+    f"Summary.\nParams: {hyperparams}\nTrain Acc: {max_train_acc:.2f}, Test Acc: {test_accuracy:.2f}\n"
+TypeError: unsupported format string passed to list.__format__
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+
+ERROR conda.cli.main_run:execute(124): `conda run python scripts/grid_search.py name=grid seed=4` failed. (See above for error)
+"""
+
 HYPERPARAM_GRID = {
-    "lr": [0.01, 0.003, 0.001, 0.0003, 0.0001],
-    "threshold": [6.0, 5.0, 4.0, 3.0, 2.0],
-    "lambda_left": [4.0, 3.0, 2.0, 1.0],
-    "lambda_x": [7.0, 6.0, 5.0, 4.0],
+    "lr": [0.005, 0.003, 0.001],
+    "threshold": [1.0, 1.5, 2.0],
+    "lambda_left": [1.0, 2.0, 3.0],
+    "lambda_x": [4.0, 5.0, 6.0],
 }
 
 
