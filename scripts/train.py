@@ -67,12 +67,14 @@ def main(cfg):
         sparse_readout=cfg.sparse_readout,
     )
 
+    init_plots_dir = os.path.join(output_dir, "init")
+    os.makedirs(init_plots_dir)
     fig1, fig2 = model.plot_fields_histograms(x=train_inputs[0], y=train_targets[0])
     fig1.suptitle("Fields Breakdown at Initialization, with external fields")
-    fig1.savefig(os.path.join(output_dir, "fields_breakdown.png"))
+    fig1.savefig(os.path.join(init_plots_dir, "fields_breakdown.png"))
     plt.close(fig1)
     fig2.suptitle("Total Field at Initialization, with external fields")
-    fig2.savefig(os.path.join(output_dir, "total_field.png"))
+    fig2.savefig(os.path.join(init_plots_dir, "total_field.png"))
     plt.close(fig2)
 
     # ================== Training ==================
@@ -106,7 +108,8 @@ def main(cfg):
     plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
     plt.close(fig)
 
-    fig = plot_accuracy_history(train_acc_history, eval_acc_history)
+    eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
+    fig = plot_accuracy_history(train_acc_history, eval_acc_history, eval_epochs)
     plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
     plt.close(fig)
 

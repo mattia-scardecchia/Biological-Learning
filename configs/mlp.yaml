@@ -1,6 +1,8 @@
-# Hydra configuration file for MLP Classifier
+defaults:
+  - /base@_here_
+  - _self_
 
-# Experiment settings
+name: mlp
 experiment_name: mlp_classifier
 seed: 42
 
@@ -23,12 +25,12 @@ model:
 # Dataloader parameters
 dataloader:
   batch_size: 32
-  val_split: 0.33  # Validation split ratio
+  val_split: 0.335  # Validation split ratio
   test_split: 0.33  # Test split ratio
 
 # Optimizer parameters
 optimizer:
-  name: "adam"  # Options: adam, adamw, sgd
+  name: "adamw"  # Options: adam, adamw, sgd
   learning_rate: 0.001
   weight_decay: 1e-5
 
@@ -42,7 +44,7 @@ scheduler:
     
 # Training parameters
 trainer:
-  max_epochs: 100
+  max_epochs: 10
   accelerator: "auto"  # Options: cpu, gpu, auto
   devices: 1
   precision: 32  # Options: 32, 16, "bf16"

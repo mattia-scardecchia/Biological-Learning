@@ -4,7 +4,7 @@ import os
 
 import hydra
 import pytorch_lightning as pl
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from src.mlp import DataModule, MLPClassifier, get_callbacks
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(config_path="../configs", config_name="mlp", version_base="1.3")
 def main(config: DictConfig):
-    logger.info(f"\n{OmegaConf.to_yaml(config)}")
     pl.seed_everything(config.seed)
 
     # Data

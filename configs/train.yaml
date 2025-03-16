@@ -15,15 +15,15 @@ lambda_right: 2.0
 lambda_x: 5.0
 lambda_y: 5.0
 
-num_epochs: 2
+num_epochs: 10
 max_steps: 50   # full sweeps over the network (relaxation)
 lr: 0.003       # perceptron rule
 threshold: 1.5  # perceptron rule
 
 data:
-  C: 10
-  P: 10
-  p: 0.1
+  C: 10  # number of classes
+  P: 10  # patterns per class
+  p: 0.3
   save_dir: 'data'
 
 eval_interval: 1
