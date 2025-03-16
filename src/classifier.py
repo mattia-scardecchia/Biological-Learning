@@ -177,6 +177,7 @@ class Classifier:
         x: np.ndarray,
         y: Optional[np.ndarray] = None,
         rng: Optional[np.random.Generator] = None,
+        ignore_right: bool = False,
     ):
         """Relaxes the network to a stable state. \\
         :param x: input (left external field). If None, omit it. \\
@@ -187,12 +188,19 @@ class Classifier:
         """
         step, made_update = 0, True
         rng = np.random.default_rng() if rng is None else rng
+        if y is not None:  # NOTE: not sure it's beneficial
+            self.layers[-1] = y.copy()
         while made_update and step < max_steps:
             made_update = False
-            for layer_idx in range(self.num_layers + 1):
+            layers_order = list(range(self.num_layers + 1))
+            # layers_order = layers_order[::-1]
+            # rng.shuffle(layers_order)
+            for layer_idx in layers_order:
                 perm = rng.permutation(len(self.layers[layer_idx]))
                 for neuron_idx in perm:
-                    local_field = self.local_field(layer_idx, neuron_idx, x, y)
+                    local_field = self.local_field(
+                        layer_idx, neuron_idx, x, y, ignore_right
+                    )
                     update = self.activations[layer_idx](local_field)
                     made_update = made_update or (
                         update != self.layers[layer_idx][neuron_idx]
@@ -260,7 +268,7 @@ class Classifier:
         fixed_points = defaultdict(list)
         for j, x in enumerate(inputs):
             self.initialize_state(rng, x)
-            self.relax(max_steps, x, None, rng)
+            self.relax(max_steps, x, None, rng, ignore_right=True)
             logits[j, :] = [
                 self.left_field(self.num_layers, i, x) for i in range(self.C)
             ]
