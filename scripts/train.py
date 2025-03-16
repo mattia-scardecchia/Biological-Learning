@@ -11,6 +11,7 @@ from src.classifier import Classifier
 from src.data import get_balanced_dataset
 from src.utils import (
     plot_accuracy_by_class_barplot,
+    plot_accuracy_history,
     plot_fixed_points_similarity_heatmap,
 )
 
@@ -103,6 +104,10 @@ def main(cfg):
 
     fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
     plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
+    plt.close(fig)
+
+    fig = plot_accuracy_history(train_acc_history, eval_acc_history)
+    plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
     plt.close(fig)
 
     logging.info("best train accuracy: {:.2f}".format(np.max(train_acc_history)))

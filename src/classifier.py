@@ -188,7 +188,7 @@ class Classifier:
         """
         step, made_update = 0, True
         rng = np.random.default_rng() if rng is None else rng
-        if y is not None:  # NOTE: not sure it's beneficial
+        if y is not None:  # NOTE: could probably remove this
             self.layers[-1] = y.copy()
         while made_update and step < max_steps:
             made_update = False

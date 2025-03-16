@@ -38,6 +38,24 @@ def plot_accuracy_by_class_barplot(accuracy_by_class: Dict[int, float]):
     ax.bar(list(accuracy_by_class.keys()), list(accuracy_by_class.values()))
     ax.set_xlabel("Class")
     ax.set_ylabel("Accuracy")
+    ax.set_ylim(0, 1.05)
+    ax.set_yticks(np.arange(0, 1.1, 0.1))
+    ax.grid()
     global_avg = np.mean(list(accuracy_by_class.values()))
     ax.set_title(f"Accuracy by class (Global Avg: {global_avg:.2f})")
+    return fig
+
+
+def plot_accuracy_history(train_acc_history, eval_acc_history=None):
+    fig, ax = plt.subplots()
+    ax.set_ylim(0, 1.05)
+    ax.set_yticks(np.arange(0, 1.1, 0.1))
+    ax.plot(train_acc_history, label="Train")
+    if eval_acc_history is not None:
+        ax.plot(eval_acc_history, label="Eval")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Accuracy")
+    ax.set_title("Evolution of accuracy during training")
+    ax.grid()
+    ax.legend()
     return fig
