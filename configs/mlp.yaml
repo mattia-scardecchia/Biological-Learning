@@ -7,7 +7,7 @@ experiment_name: mlp_classifier
 seed: 42
 
 # Dataset parameters
-dataset:
+data:
   N: 100  # Input dimensionality
   P: 30   # Patterns per class (train + val + test)
   C: 10   # Number of classes
