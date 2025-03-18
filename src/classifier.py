@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 from matplotlib import pyplot as plt
 
-DTYPE = np.float32
+from src.utils import DTYPE, sign, theta
 
 
 def initialize_state(N: int, rng: Optional[np.random.Generator] = None):
@@ -25,27 +25,19 @@ def initialize_readout_state(
         return np.array(rng.choice([-1, 1], size=(C,)), dtype=DTYPE)
 
 
-def initialize_couplings(N: int, J_D: float, rng: Optional[np.random.Generator] = None):
+def initialize_J(N: int, J_D: float, rng: Optional[np.random.Generator] = None):
     rng = np.random.default_rng() if rng is None else rng
     J = np.array(rng.normal(0, 1 / np.sqrt(N), size=(N, N)), dtype=DTYPE)
     np.fill_diagonal(J, J_D)
     return J
 
 
-def initialize_readout_couplings(
+def initialize_readout_weights(
     N: int, C: int, rng: Optional[np.random.Generator] = None
 ):
     rng = np.random.default_rng() if rng is None else rng
     W = np.array(rng.choice([-1, 1], size=(C, N)), dtype=DTYPE)
     return W
-
-
-def sign(x: float):
-    return 2 * int(x > 0) - 1
-
-
-def theta(x: float):
-    return int(x > 0)
 
 
 class Classifier:
@@ -64,16 +56,17 @@ class Classifier:
         rng: Optional[np.random.Generator] = None,
         sparse_readout: bool = True,
     ):
-        """Initializes the classifier.
-        :param num_layers: number of layers.
-        :param N: number of neurons per layer.
-        :param C: number of classes.
-        :param lambda_left: strength of coupling with previous layer.
-        :param lambda_right: strength of coupling with next layer.
-        :param lambda_x: strength of coupling with input.
-        :param lambda_y: strength of coupling with target.
-        :param J_D: self-interaction strength.
-        :param rng: random number generator for initialization.
+        """Initializes the classifier. \\
+        :param num_layers: number of layers. \\
+        :param N: number of neurons per layer. \\
+        :param C: number of classes. \\
+        :param lambda_left: strength of coupling with previous layer. \\
+        :param lambda_right: strength of coupling with next layer. \\
+        :param lambda_x: strength of coupling with input. \\
+        :param lambda_y: strength of coupling with target. \\
+        :param J_D: self-interaction strength. \\
+        :param rng: random number generator for initialization. \\
+        :param sparse_readout: if true, use 0/1 states for the readout layer. Otherwise, use -1/1 states.
         """
         self.num_layers = num_layers
         self.N = N
@@ -113,9 +106,9 @@ class Classifier:
         """Initializes the couplings of the network."""
         rng = np.random.default_rng() if rng is None else rng
         self.couplings = [
-            initialize_couplings(self.N, self.J_D, rng) for _ in range(self.num_layers)
+            initialize_J(self.N, self.J_D, rng) for _ in range(self.num_layers)
         ]  # num_layers, N, N
-        self.W = initialize_readout_couplings(self.N, self.C, rng)  # C, N
+        self.W = initialize_readout_weights(self.N, self.C, rng)  # C, N
 
     def internal_field(self, layer_idx: int, neuron_idx: int):
         """Field due to interaction within each layer."""
@@ -188,12 +181,12 @@ class Classifier:
         """
         step, made_update = 0, True
         rng = np.random.default_rng() if rng is None else rng
-        if y is not None:  # NOTE: could probably remove this
+        if y is not None:  # NOTE: not essential
             self.layers[-1] = y.copy()
         while made_update and step < max_steps:
             made_update = False
             layers_order = list(range(self.num_layers + 1))
-            # layers_order = layers_order[::-1]
+            # layers_order = layers_order[::-1]  # NOTE: enabling this makes convergence faster
             # rng.shuffle(layers_order)
             for layer_idx in layers_order:
                 perm = rng.permutation(len(self.layers[layer_idx]))

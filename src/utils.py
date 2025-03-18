@@ -3,6 +3,16 @@ from typing import Dict, List
 import numpy as np
 from matplotlib import pyplot as plt
 
+DTYPE = np.float32
+
+
+def sign(x: float):
+    return 2 * int(x > 0) - 1
+
+
+def theta(x: float):
+    return int(x > 0)
+
 
 def plot_fixed_points_similarity_heatmap(
     fixed_points: Dict[int, List[np.ndarray]],
