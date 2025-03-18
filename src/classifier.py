@@ -405,3 +405,21 @@ class Classifier:
         fig1.tight_layout(rect=(0, 0, 1, 0.97))
         fig2.tight_layout(rect=(0, 0, 1, 0.97))
         return fig1, fig2
+
+    def plot_couplings_histograms(self):
+        """
+        Plots histograms of the couplings at each layer.
+        """
+        fig, axs = plt.subplots(2, self.num_layers, figsize=(5 * self.num_layers, 8))
+        axs = axs.flatten()
+
+        for layer_idx in range(self.num_layers):
+            couplings = self.couplings[layer_idx].flatten()
+            axs[layer_idx].hist(couplings, bins=30, alpha=0.6, label="Couplings")
+            axs[layer_idx].set_title(f"Layer {layer_idx}")
+            axs[layer_idx].legend()
+
+        for j in range(self.num_layers, len(axs)):
+            axs[j].axis("off")
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        return fig

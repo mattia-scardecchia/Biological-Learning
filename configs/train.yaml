@@ -7,8 +7,11 @@ seed: 42
 
 N: 500
 num_layers: 5
-J_D: 0.2
 sparse_readout: false
+
+J_D: 0.2
+sparse_couplings: false
+sparsity_level: 0.25     # fraction of active (asymmetric) synapses
 
 lambda_left: 2.0
 lambda_right: 2.0
