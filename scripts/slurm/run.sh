@@ -16,12 +16,14 @@
 
 mkdir -p slurm_logs/output slurm_logs/error
 module load miniconda3
+SEED=${seed:-11}
+echo "Running run.sh with seed=$SEED"
 
 # Grid search
-# conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py name=grid seed=4
+conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py name=grid seed=$SEED
 
 # Train
-conda run -p /home/3144860/.conda/envs/bio python scripts/train.py --multirun data.p=0.3,0.35,0.4 data.P=10,20,30 num_epochs=20 name=baseline seed=1
+# conda run -p /home/3144860/.conda/envs/bio python scripts/train.py --multirun data.p=0.3,0.35,0.4 data.P=10,20,30 num_epochs=20 name=baseline seed=$SEED
 
 # MLP
-# conda run -p /home/3144860/.conda/envs/bio python scripts/train_mlp.py
+# conda run -p /home/3144860/.conda/envs/bio python scripts/train_mlp.py seed=$SEED

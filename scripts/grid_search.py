@@ -11,27 +11,13 @@ from src.classifier import Classifier
 from src.data import get_balanced_dataset
 from src.sparse_couplings_classifier import SparseCouplingsClassifier
 
-"""
-TODO: debug!
-
-Error executing job with overrides: ['name=grid', 'seed=4']
-Traceback (most recent call last):
-  File "/home/3144860/Biological-Learning/scripts/grid_search.py", line 96, in main
-    f"Summary.\nParams: {hyperparams}\nTrain Acc: {max_train_acc:.2f}, Test Acc: {test_accuracy:.2f}\n"
-TypeError: unsupported format string passed to list.__format__
-
-Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
-
-ERROR conda.cli.main_run:execute(124): `conda run python scripts/grid_search.py name=grid seed=4` failed. (See above for error)
-"""
-
 HYPERPARAM_GRID = {
-    "lr": [0.009, 0.007, 0.005, 0.003, 0.001],
-    "threshold": [0.5, 1.0, 1.5, 2.0, 2.5],
+    "lr": [0.007, 0.005, 0.003, 0.001],
+    "threshold": [1.0, 1.5, 2.0, 2.5],
     "lambda_left": [1.0, 2.0, 3.0],
     "lambda_x": [4.0, 5.0, 6.0],
+    "J_D": [0.2, 0.4],
 }
-
 
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
 def main(cfg):
@@ -66,7 +52,8 @@ def main(cfg):
         dump=True,
     )
 
-    results = []
+    results_file = os.path.join(output_dir, "grid_search_results.csv")
+    header_written = False
     i = 0
     for values in itertools.product(*HYPERPARAM_GRID.values()):
         i += 1
@@ -84,7 +71,7 @@ def main(cfg):
             "lambda_right": hyperparams["lambda_right"],
             "lambda_x": hyperparams["lambda_x"],
             "lambda_y": hyperparams["lambda_y"],
-            "J_D": cfg.J_D,
+            "J_D": hyperparams["J_D"],
             "rng": rng,
             "sparse_readout": cfg.sparse_readout,
         }
@@ -109,27 +96,28 @@ def main(cfg):
             rng,
         )
 
-        max_train_acc, final_train_acc = (
-            np.max(train_acc_history),
-            train_acc_history[-1],
-        )
+        max_train_acc, final_train_acc = np.max(train_acc_history), train_acc_history[-1]
         max_eval_acc, final_eval_acc = np.max(eval_acc_history), eval_acc_history[-1]
-        results.append(
-            {
-                **hyperparams,
-                "max_train_acc": max_train_acc,
-                "final_train_acc": final_train_acc,
-                "max_eval_acc": max_eval_acc,
-                "final_eval_acc": final_eval_acc,
-            }
-        )
+        result_row = {
+            **hyperparams,
+            "max_train_acc": max_train_acc,
+            "final_train_acc": final_train_acc,
+            "max_eval_acc": max_eval_acc,
+            "final_eval_acc": final_eval_acc,
+        }
+
+        # ================== Log results ==================
+        df_row = pd.DataFrame([result_row])
+        if not header_written:
+            df_row.to_csv(results_file, index=False, mode='w')
+            header_written = True
+        else:
+            df_row.to_csv(results_file, index=False, mode='a', header=False)
         logging.info(
             f"Summary.\nParams: {hyperparams}\nFinal Train Acc: {final_train_acc:.2f}, Max Eval Acc: {max_eval_acc:.2f}\n"
         )
 
-    results_df = pd.DataFrame(results)
-    results_df.to_csv(os.path.join(output_dir, "grid_search_results.csv"), index=False)
-    print("Hyperparameter tuning completed. Results saved.")
+    logging.info(f"Hyperparameter tuning completed. Results saved in {results_file}")
 
 
 if __name__ == "__main__":
