@@ -21,7 +21,7 @@ def main(config: DictConfig):
 
     # Data
     data_module = DataModule(
-        dataset_config=config.dataset,
+        dataset_config=config.data,
         batch_size=config.dataloader.batch_size,
         val_split=config.dataloader.val_split,
         test_split=config.dataloader.test_split,
