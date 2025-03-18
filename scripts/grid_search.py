@@ -9,6 +9,7 @@ from hydra.core.hydra_config import HydraConfig
 
 from src.classifier import Classifier
 from src.data import get_balanced_dataset
+from src.sparse_couplings_classifier import SparseCouplingsClassifier
 
 """
 TODO: debug!
@@ -25,8 +26,8 @@ ERROR conda.cli.main_run:execute(124): `conda run python scripts/grid_search.py 
 """
 
 HYPERPARAM_GRID = {
-    "lr": [0.005, 0.003, 0.001],
-    "threshold": [1.0, 1.5, 2.0],
+    "lr": [0.009, 0.007, 0.005, 0.003, 0.001],
+    "threshold": [0.5, 1.0, 1.5, 2.0, 2.5],
     "lambda_left": [1.0, 2.0, 3.0],
     "lambda_x": [4.0, 5.0, 6.0],
 }
@@ -37,8 +38,9 @@ def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
     train_data_dir = os.path.join(cfg.data.save_dir, "train")
     test_data_dir = os.path.join(cfg.data.save_dir, "test")
-
     rng = np.random.default_rng(cfg.seed)
+
+    # ================== Data ==================
     inputs, targets, metadata, prototypes = get_balanced_dataset(
         cfg.N,
         cfg.data.P,
@@ -73,20 +75,28 @@ def main(cfg):
         hyperparams["lambda_right"] = hyperparams["lambda_left"]
         hyperparams["lambda_y"] = hyperparams["lambda_x"]
 
-        model = Classifier(
-            cfg.num_layers,
-            cfg.N,
-            cfg.data.C,
-            hyperparams["lambda_left"],
-            hyperparams["lambda_right"],
-            hyperparams["lambda_x"],
-            hyperparams["lambda_y"],
-            cfg.J_D,
-            rng,
-            sparse_readout=cfg.sparse_readout,
-        )
+        # ================== Model ==================
+        model_kwargs = {
+            "num_layers": cfg.num_layers,
+            "N": cfg.N,
+            "C": cfg.data.C,
+            "lambda_left": hyperparams["lambda_left"],
+            "lambda_right": hyperparams["lambda_right"],
+            "lambda_x": hyperparams["lambda_x"],
+            "lambda_y": hyperparams["lambda_y"],
+            "J_D": cfg.J_D,
+            "rng": rng,
+            "sparse_readout": cfg.sparse_readout,
+        }
+        if cfg.sparse_couplings:
+            model_kwargs["sparsity_level"] = cfg.sparsity_level
+            classifier_cls = SparseCouplingsClassifier
+        else:
+            classifier_cls = Classifier
+        model = classifier_cls(**model_kwargs)
 
-        acc_history = model.train_loop(
+        # ================== Training ==================
+        train_acc_history, eval_acc_history = model.train_loop(
             cfg.num_epochs,
             inputs,
             targets,
@@ -99,15 +109,22 @@ def main(cfg):
             rng,
         )
 
-        max_train_acc = max(acc_history) if acc_history else 0.0
-        metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps, rng)
-        test_accuracy = metrics["overall_accuracy"]
-        logging.info(f"Test accuracy: {test_accuracy:.2f}\n")
+        max_train_acc, final_train_acc = (
+            np.max(train_acc_history),
+            train_acc_history[-1],
+        )
+        max_eval_acc, final_eval_acc = np.max(eval_acc_history), eval_acc_history[-1]
         results.append(
-            {**hyperparams, "max_train_acc": max_train_acc, "test_acc": test_accuracy}
+            {
+                **hyperparams,
+                "max_train_acc": max_train_acc,
+                "final_train_acc": final_train_acc,
+                "max_eval_acc": max_eval_acc,
+                "final_eval_acc": final_eval_acc,
+            }
         )
         logging.info(
-            f"Summary.\nParams: {hyperparams}\nTrain Acc: {max_train_acc:.2f}, Test Acc: {test_accuracy:.2f}\n"
+            f"Summary.\nParams: {hyperparams}\nFinal Train Acc: {final_train_acc:.2f}, Max Eval Acc: {max_eval_acc:.2f}\n"
         )
 
     results_df = pd.DataFrame(results)
