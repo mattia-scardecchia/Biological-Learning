@@ -18,7 +18,7 @@ fi
 IFS=',' read -ra seeds_array <<< "$seeds_arg"
 
 # Define the list of cnodes to cycle through
-cnodes=(cnode01 cnode02 cnode03 cnode04)
+cnodes=(cnode05 cnode06 cnode07 cnode08)
 num_nodes=${#cnodes[@]}
 
 # Loop over each seed and submit a job with the corresponding cnode
@@ -28,6 +28,6 @@ for i in "${!seeds_array[@]}"; do
     cnode=${cnodes[$(( i % num_nodes ))]}
     
     echo "Sleeping, then submitting job with seed=${seed} on node=${cnode}"
-    sleep 5
+    sleep 30
     sbatch --export=ALL,seed=$seed --nodelist=$cnode scripts/slurm/run.sh
 done

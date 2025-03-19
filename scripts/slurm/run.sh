@@ -5,8 +5,8 @@
 #SBATCH --error=slurm_logs/error/error_%x_%j.txt
 
 #SBATCH --time=23:00:00
-#SBATCH --partition=defq
-#SBATCH --nodelist=cnode01
+#SBATCH --partition=compute
+#SBATCH --nodelist=cnode05
 #SBATCH --qos=normal
 
 #SBATCH --ntasks=1
