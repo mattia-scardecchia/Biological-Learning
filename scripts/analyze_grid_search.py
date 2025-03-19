@@ -1,4 +1,5 @@
 import itertools
+import math
 import os
 
 import matplotlib.pyplot as plt
@@ -6,24 +7,38 @@ import numpy as np
 import pandas as pd
 
 # -------------------- Configuration --------------------
-BASE_DIR = "data/grid-search-03-03"
-THRESHOLD_VALUE = 0.10
-ACCURACY_TYPE = "max_train_acc"
+BASE_DIR = "data/grid-search-18-03/sparsity 1.0"
+THRESHOLD_VALUE = 0.5
+ACCURACY_TYPE = "max_eval_acc"
 HIST_BINS = 10
+
+
+# -------------------- Helper Functions --------------------
+def create_subplots(n, figsize_per_plot=(5, 4)):
+    """Create subplots dynamically based on n plots."""
+    ncols = math.ceil(math.sqrt(n))
+    nrows = math.ceil(n / ncols)
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(figsize_per_plot[0] * ncols, figsize_per_plot[1] * nrows)
+    )
+    if n == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+    return fig, axes
 
 
 # -------------------- Data Ingestion & Processing --------------------
 def load_data(base_dir: str):
     """Load CSV files from folders and return concatenated DataFrame with a multi-index."""
     folders = [
-        folder
-        for folder in os.listdir(base_dir)
-        if os.path.isdir(os.path.join(base_dir, folder))
+        f for f in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, f))
     ]
     dfs = [
         pd.read_csv(os.path.join(base_dir, folder, "grid_search_results.csv"))
         for folder in folders
     ]
+    # Determine index columns as those not containing 'acc' and not in these lambda columns
     index_columns = [
         c
         for c in dfs[0].columns
@@ -51,82 +66,89 @@ def plot_histograms(
     filtered: pd.DataFrame, index_names: list, base_dir: str, threshold: float
 ):
     """Plot histograms for each index variable in the filtered data."""
-    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-    axs = axs.flatten()
-
+    n = len(index_names)
+    fig, axes = create_subplots(n, figsize_per_plot=(5, 4))
     for i, name in enumerate(index_names):
         vals = filtered.index.get_level_values(name).astype(float)
-        axs[i].hist(vals, bins=HIST_BINS, edgecolor="black")
-        axs[i].set_title(f"Histogram of {name}")
-
+        axes[i].hist(vals, bins=HIST_BINS, edgecolor="black")
+        axes[i].set_title(f"Histogram of {name}")
+    # Hide unused subplots if any
+    for ax in axes[n:]:
+        ax.set_visible(False)
     plt.suptitle(f"Histograms of Index Variables | {ACCURACY_TYPE} > {threshold}")
     plt.tight_layout()
-    plt.savefig(os.path.join(base_dir, f"histograms-filtered{threshold}.png"))
-    plt.show()
+    plt.savefig(os.path.join(base_dir, "histograms-filtered.png"))
+    plt.close()
 
 
 def get_reference_values(filtered: pd.DataFrame, index_names: list):
     """Calculate the median of each index variable from filtered data."""
-    out = {}
+    ref = {}
     for name in index_names:
-        sorted_vals = np.sort(filtered.index.get_level_values(name).astype(float))
-        out[name] = sorted_vals[len(sorted_vals) // 2]  # Upper median
-    return out
+        vals = np.sort(filtered.index.get_level_values(name).astype(float))
+        ref[name] = vals[len(vals) // 2]  # Upper median
+    return ref
 
 
-def plot_heatmaps_with_fixed_pairs(
-    means: pd.DataFrame, ref_values: dict, index_names: list
-):
-    """Plot heatmaps for each fixed pair of indices using the reference values."""
-    fixed_pairs = list(itertools.combinations(index_names, 2))
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    axes = axes.flatten()
-
-    for ax, fixed_pair in zip(axes, fixed_pairs):
-        free_pair = [name for name in index_names if name not in fixed_pair]
+def plot_heatmaps_with_fixed(means: pd.DataFrame, ref_values: dict, index_names: list):
+    """
+    For an arbitrary number of index variables, fix all but two (using provided reference values)
+    and plot a heatmap for the remaining free pair.
+    """
+    n = len(index_names)
+    if n < 2:
+        print("Not enough indices to create a heatmap.")
+        return
+    # For each combination of fixed variables of length (n-2), the remaining two are free.
+    fixed_combinations = list(itertools.combinations(index_names, n - 2))
+    fig, axes = create_subplots(len(fixed_combinations), figsize_per_plot=(5, 4))
+    for ax, fixed_vars in zip(axes, fixed_combinations):
+        free_vars = [name for name in index_names if name not in fixed_vars]
+        # Expect free_vars to have exactly 2 elements
+        if len(free_vars) != 2:
+            continue
         condition = np.ones(len(means), dtype=bool)
-        for name in fixed_pair:
+        for var in fixed_vars:
             condition &= (
-                means.index.get_level_values(name).astype(float) == ref_values[name]
+                means.index.get_level_values(var).astype(float) == ref_values[var]
             )
         subdf = means[condition]
         pivot_table = subdf.reset_index().pivot(
-            index=free_pair[0], columns=free_pair[1], values=ACCURACY_TYPE
+            index=free_vars[0], columns=free_vars[1], values=ACCURACY_TYPE
         )
         im = ax.imshow(pivot_table, aspect="auto", origin="lower", interpolation="none")
-        ax.set_title(
-            f"Fixed: {fixed_pair[0]}={ref_values[fixed_pair[0]]}, "
-            f"{fixed_pair[1]}={ref_values[fixed_pair[1]]}\nFree: {free_pair[0]} vs {free_pair[1]}"
-        )
-        ax.set_xlabel(free_pair[1])
-        ax.set_ylabel(free_pair[0])
+        fixed_str = ", ".join(f"{var}={ref_values[var]}" for var in fixed_vars)
+        ax.set_title(f"{fixed_str}\nFree: {free_vars[0]} vs {free_vars[1]}")
+        ax.set_xlabel(free_vars[1])
+        ax.set_ylabel(free_vars[0])
         ax.set_xticks(np.arange(len(pivot_table.columns)))
         ax.set_xticklabels(pivot_table.columns.astype(str), rotation=45)
         ax.set_yticks(np.arange(len(pivot_table.index)))
         ax.set_yticklabels(pivot_table.index.astype(str))
         fig.colorbar(im, ax=ax)
-
-    plt.suptitle(f"Heatmaps with Fixed Pairs | {ACCURACY_TYPE} > {THRESHOLD_VALUE}")
+    plt.suptitle(
+        f"{ACCURACY_TYPE} having fixed all other variables to a decent choice | {ACCURACY_TYPE} > {THRESHOLD_VALUE}"
+    )
     plt.tight_layout()
-    plt.show()
+    plt.close()
 
 
 def plot_heatmaps_averaged(means: pd.DataFrame, index_names: list, base_dir: str):
-    """Plot heatmaps averaged over all fixed pairs."""
-    fixed_pairs = list(itertools.combinations(index_names, 2))
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    axes = axes.flatten()
-    for ax, fixed_pair in zip(axes, fixed_pairs):
-        free_pair = [name for name in index_names if name not in fixed_pair]
+    """
+    For each combination of two indices (free pair), average over all the remaining variables
+    and plot the resulting heatmap.
+    """
+    free_pairs = list(itertools.combinations(index_names, 2))
+    fig, axes = create_subplots(len(free_pairs), figsize_per_plot=(5, 4))
+    for ax, free_pair in zip(axes, free_pairs):
+        fixed_vars = [name for name in index_names if name not in free_pair]
         df_reset = means.reset_index()
-        group = df_reset.groupby(free_pair)[ACCURACY_TYPE].mean().reset_index()
+        group = df_reset.groupby(list(free_pair))[ACCURACY_TYPE].mean().reset_index()
         pivot_table = group.pivot(
             index=free_pair[0], columns=free_pair[1], values=ACCURACY_TYPE
         )
         im = ax.imshow(pivot_table, aspect="auto", origin="lower", interpolation="none")
-        ax.set_title(
-            f"Averaged over all values of ({fixed_pair[0]}, {fixed_pair[1]})\nFree: {free_pair[0]} vs {free_pair[1]}"
-        )
+        ax.set_title(f"{free_pair[0]} vs {free_pair[1]}")
         ax.set_xlabel(free_pair[1])
         ax.set_ylabel(free_pair[0])
         ax.set_xticks(np.arange(len(pivot_table.columns)))
@@ -134,16 +156,21 @@ def plot_heatmaps_averaged(means: pd.DataFrame, index_names: list, base_dir: str
         ax.set_yticks(np.arange(len(pivot_table.index)))
         ax.set_yticklabels(pivot_table.index.astype(str))
         fig.colorbar(im, ax=ax)
+    fig.suptitle(
+        f"{ACCURACY_TYPE} averaged over all values of all other variables | {ACCURACY_TYPE} > {THRESHOLD_VALUE}"
+    )
     plt.tight_layout()
     plt.savefig(os.path.join(base_dir, "heatmaps-averaged.png"))
-    plt.show()
+    plt.close()
 
 
 def plot_line_plots_fixed(means: pd.DataFrame, ref_values: dict, index_names: list):
-    """For each index variable, plot a line graph with the other three fixed at reference values."""
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    axes = axes.flatten()
-
+    """
+    For each index variable, plot a line graph showing the effect of that variable,
+    while fixing the other variables at their reference values.
+    """
+    n = len(index_names)
+    fig, axes = create_subplots(n, figsize_per_plot=(6, 4))
     for i, free_var in enumerate(index_names):
         fixed_vars = [name for name in index_names if name != free_var]
         condition = np.ones(len(means), dtype=bool)
@@ -158,23 +185,24 @@ def plot_line_plots_fixed(means: pd.DataFrame, ref_values: dict, index_names: li
             subdf_reset[free_var].astype(float), subdf_reset[ACCURACY_TYPE], marker="o"
         )
         ax.set_title(
-            f"Fixed {fixed_vars} = {[float(ref_values[var]) for var in fixed_vars]}\nEffect of {free_var}"
+            f"{fixed_vars} = {[ref_values[var] for var in fixed_vars]}\nEffect of {free_var}"
         )
         ax.set_xlabel(free_var)
         ax.set_ylabel(ACCURACY_TYPE)
-
     plt.suptitle(
-        f"Line Plots with Fixed Variables | {ACCURACY_TYPE} > {THRESHOLD_VALUE}"
+        f"{ACCURACY_TYPE} having fixed all other variables to a decent choice | {ACCURACY_TYPE} > {THRESHOLD_VALUE}"
     )
     plt.tight_layout()
-    plt.show()
+    plt.close()
 
 
 def plot_line_plots_averaged(means: pd.DataFrame, index_names: list, base_dir: str):
-    """For each index variable, plot a line graph averaging over the other three indices."""
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    axes = axes.flatten()
-
+    """
+    For each index variable, plot a line graph showing the effect of that variable,
+    averaging over all other indices.
+    """
+    n = len(index_names)
+    fig, axes = create_subplots(n, figsize_per_plot=(6, 4))
     for i, free_var in enumerate(index_names):
         df_reset = means.reset_index()
         group = (
@@ -185,18 +213,16 @@ def plot_line_plots_averaged(means: pd.DataFrame, index_names: list, base_dir: s
         )
         ax = axes[i]
         ax.plot(group[free_var].astype(float), group[ACCURACY_TYPE], marker="o")
-        ax.set_title(
-            f"Averaged over {[name for name in index_names if name != free_var]}\nEffect of {free_var}"
-        )
+        other_vars = [name for name in index_names if name != free_var]
+        ax.set_title(f"Effect of {free_var}")
         ax.set_xlabel(free_var)
         ax.set_ylabel(f"Average {ACCURACY_TYPE}")
-
     plt.suptitle(
-        f"Line Plots Averaged Over Variables | {ACCURACY_TYPE} > {THRESHOLD_VALUE}"
+        f"{ACCURACY_TYPE} averaged over all values of all other variables | {ACCURACY_TYPE} > {THRESHOLD_VALUE}"
     )
     plt.tight_layout()
     plt.savefig(os.path.join(base_dir, "line-plots-averaged.png"))
-    plt.show()
+    plt.close()
 
 
 # -------------------- Main Routine --------------------
@@ -217,17 +243,17 @@ def main():
     ref_values = get_reference_values(filtered, index_names)
     print("Reference values:", ref_values)
 
-    # Plot heatmaps for fixed pairs
-    plot_heatmaps_with_fixed_pairs(means, ref_values, index_names)
+    # Plot heatmaps with fixed variables (fixing all but 2 at ref values)
+    plot_heatmaps_with_fixed(filtered, ref_values, index_names)
 
-    # Plot heatmaps averaged over fixed pairs
-    plot_heatmaps_averaged(means, index_names, BASE_DIR)
+    # Plot heatmaps averaged over all but two variables
+    plot_heatmaps_averaged(filtered, index_names, BASE_DIR)
 
-    # Plot line plots with three variables fixed at reference values
-    plot_line_plots_fixed(means, ref_values, index_names)
+    # Plot line plots with other variables fixed at reference values
+    plot_line_plots_fixed(filtered, ref_values, index_names)
 
-    # Plot line plots averaging over the other three variables
-    plot_line_plots_averaged(means, index_names, BASE_DIR)
+    # Plot line plots averaging over the other variables
+    plot_line_plots_averaged(filtered, index_names, BASE_DIR)
 
 
 if __name__ == "__main__":
