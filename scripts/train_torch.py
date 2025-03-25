@@ -55,10 +55,10 @@ def main(cfg):
             dump=True,
         )
     )
-    train_inputs = torch.tensor(train_inputs, dtype=torch.float32)
-    train_targets = torch.tensor(train_targets, dtype=torch.float32)
-    eval_inputs = torch.tensor(eval_inputs, dtype=torch.float32)
-    eval_targets = torch.tensor(eval_targets, dtype=torch.float32)
+    train_inputs = torch.tensor(train_inputs, dtype=torch.float32).to(cfg.device)
+    train_targets = torch.tensor(train_targets, dtype=torch.float32).to(cfg.device)
+    eval_inputs = torch.tensor(eval_inputs, dtype=torch.float32).to(cfg.device)
+    eval_targets = torch.tensor(eval_targets, dtype=torch.float32).to(cfg.device)
 
     # ================== Model Initialization ==================
     model_kwargs = {
@@ -78,7 +78,7 @@ def main(cfg):
     # ================== Initial Plots ==================
     init_plots_dir = os.path.join(output_dir, "init")
     os.makedirs(init_plots_dir, exist_ok=True)
-    fig1, fig2 = model.plot_fields_histograms(x=train_inputs[0], y=train_targets[0])
+    fig1, fig2 = model.plot_fields_histograms(x=train_inputs[0:1], y=train_targets[0:1])
     fig1.suptitle("Fields Breakdown at Initialization, with external fields")
     fig1.savefig(os.path.join(init_plots_dir, "fields_breakdown.png"))
     plt.close(fig1)
