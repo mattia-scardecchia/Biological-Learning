@@ -4,12 +4,14 @@ import time
 
 import hydra
 import numpy as np
+import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
 from src.classifier.torch_classifier import TorchClassifier
 from src.data import get_balanced_dataset
 from src.utils import (
+    plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_fixed_points_similarity_heatmap,
     # Uncomment the following if you have an accuracy-by-class plot utility.
@@ -53,6 +55,10 @@ def main(cfg):
             dump=True,
         )
     )
+    train_inputs = torch.tensor(train_inputs, dtype=torch.float32)
+    train_targets = torch.tensor(train_targets, dtype=torch.float32)
+    eval_inputs = torch.tensor(eval_inputs, dtype=torch.float32)
+    eval_targets = torch.tensor(eval_targets, dtype=torch.float32)
 
     # ================== Model Initialization ==================
     model_kwargs = {
@@ -102,30 +108,28 @@ def main(cfg):
     logging.info(f"Training took {t1 - t0:.2f} seconds")
 
     # ================== Evaluation ==================
-    eval_accuracy, logits = model.evaluate(eval_inputs, eval_targets, cfg.max_steps)
-    logging.info(f"Final Eval Accuracy: {eval_accuracy:.2f}")
+    eval_metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps)
+    logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
     t2 = time.time()
     logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
 
     # ================== Plotting Results ==================
-    # Assuming you have a utility that accepts fixed points or representations
-    fig = plot_fixed_points_similarity_heatmap(logits)
-    fig.savefig(os.path.join(output_dir, "eval_representations_similarity.png"))
+    fig = plot_fixed_points_similarity_heatmap(eval_metrics["fixed_points"])
+    plt.savefig(os.path.join(output_dir, "eval_representations_similarity.png"))
     plt.close(fig)
 
-    # If available, you can also plot accuracy-by-class.
-    # fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
-    # fig.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
-    # plt.close(fig)
+    fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
+    plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
+    plt.close(fig)
 
     eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
     fig = plot_accuracy_history(train_acc_history, eval_acc_history, eval_epochs)
-    fig.savefig(os.path.join(output_dir, "accuracy_history.png"))
+    plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
     plt.close(fig)
 
     fig = model.plot_couplings_histograms()
-    fig.suptitle("Couplings at the End of Training")
-    fig.savefig(os.path.join(output_dir, "couplings.png"))
+    fig.suptitle("Couplings at the end of training")
+    plt.savefig(os.path.join(output_dir, "couplings.png"))
     plt.close(fig)
 
     logging.info("Best train accuracy: {:.2f}".format(np.max(train_acc_history)))

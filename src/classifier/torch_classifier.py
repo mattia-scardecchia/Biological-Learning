@@ -5,6 +5,20 @@ import matplotlib.pyplot as plt
 import torch
 
 
+def initialize_layer(
+    batch_size: int, layer_width: int, device: str, generator: torch.Generator
+):
+    state = torch.randint(
+        0,
+        2,
+        (batch_size, layer_width),
+        device=device,
+        dtype=torch.float32,
+        generator=generator,
+    )
+    return state * 2 - 1
+
+
 class TorchClassifier:
     def __init__(
         self,
@@ -41,41 +55,46 @@ class TorchClassifier:
         self.lambda_y = lambda_y
         self.J_D = J_D
         self.device = device
-
-        if seed is not None:
-            torch.manual_seed(seed)
-
-        # Create a dedicated generator for reproducibility.
         self.generator = torch.Generator(device=self.device)
         if seed is not None:
             self.generator.manual_seed(seed)
 
-        # Initialize internal coupling matrices (one per hidden layer)
-        self.couplings = [self.initialize_J() for _ in range(num_layers)]
-        # Initialize readout weights (W_forth and symmetric W_back)
-        self.W_forth = self.initialize_readout_weights()
-        self.W_back = self.W_forth.clone()
-
+        self.couplings = [
+            self.initialize_J() for _ in range(num_layers)
+        ]  # num_layers, N, N
+        self.W_forth = self.initialize_readout_weights()  # C, N
+        self.W_back = self.W_forth.clone()  # C, N
         logging.info(
             f"TorchClassifier initialized with {num_layers} hidden layers, N={N}, C={C} on {device}"
         )
 
-    def initialize_state(self, batch_size: int, size: int):
+    def initialize_state(
+        self, batch_size: int, x: torch.Tensor = None, y: torch.Tensor = None
+    ):
         """
-        Initializes a state tensor with values -1 or +1.
-        :param batch_size: number of samples in the batch.
-        :param size: number of neurons.
-        :return: tensor of shape (batch_size, size) on self.device.
+        Initializes states for all layers (hidden and readout) for a given batch.
+        If x is provided, all hidden layers are set to clones of x;
+        otherwise, they are randomly initialized to -1 or +1.
+        For the readout layer, if y is provided, it is used (clamped) else randomly initialized.
+        :param batch_size: number of samples.
+        :param x: input tensor of shape (batch_size, N) or None.
+        :param y: target tensor of shape (batch_size, C) or None.
+        :return: list of state tensors for each layer (first num_layers for hidden layers, last for readout).
         """
-        state = torch.randint(
-            0,
-            2,
-            (batch_size, size),
-            device=self.device,
-            dtype=torch.float32,
-            generator=self.generator,
-        )
-        return state * 2 - 1
+        if x is not None:
+            states = [x.clone() for _ in range(self.num_layers)]
+        else:
+            states = [
+                initialize_layer(batch_size, self.N, self.device, self.generator)
+                for _ in range(self.num_layers)
+            ]
+        if y is not None:
+            states.append(y.clone().to(self.device).float())
+        else:
+            states.append(
+                initialize_layer(batch_size, self.C, self.device, self.generator)
+            )
+        return states
 
     def initialize_J(self):
         """
@@ -102,13 +121,51 @@ class TorchClassifier:
         )
         return weights * 2 - 1
 
-    def activation(self, x: torch.Tensor):
+    def sign(self, input: torch.Tensor):
         """
         Sign activation function. Returns +1 if x>=0, else -1.
         """
-        pos = torch.tensor(1.0, device=self.device, dtype=x.dtype)
-        neg = torch.tensor(-1.0, device=self.device, dtype=x.dtype)
-        return torch.where(x >= 0, pos, neg)
+        pos = torch.tensor(1.0, device=self.device, dtype=input.dtype)
+        neg = torch.tensor(-1.0, device=self.device, dtype=input.dtype)
+        return torch.where(input >= 0, pos, neg)
+
+    def internal_field(self, layer_idx: int, states: list):
+        """
+        Computes the internal field for a given layer.
+        For hidden layers, it is a matrix multiplication between the state and the transposed coupling matrix.
+        For the readout layer, it is zero.
+        """
+        if layer_idx == self.num_layers:
+            return torch.zeros_like(states[layer_idx])  # readout layer
+        return torch.matmul(states[layer_idx], self.couplings[layer_idx].t())
+
+    def left_field(self, layer_idx: int, states: list, x: torch.Tensor = None):
+        """Field due to interaction with previous layer, or with left external field."""
+        if layer_idx == 0:
+            if x is None:
+                return torch.zeros_like(states[layer_idx])
+            return self.lambda_x * x
+        if layer_idx == self.num_layers:
+            return torch.matmul(
+                states[self.num_layers - 1], self.W_forth.t()
+            ) / math.sqrt(self.N)
+        return self.lambda_left * states[layer_idx - 1]
+
+    def right_field(self, layer_idx: int, states: list, y: torch.Tensor = None):
+        """
+        Computes the right field.
+        - For the last hidden layer, it returns the projection from the readout state via W_back.
+        - For the readout layer, if y is provided, it returns lambda_y * activation(y).
+        - For intermediate layers, it returns lambda_right * state of the next layer.
+        """
+        if layer_idx == self.num_layers - 1:
+            prod = torch.matmul(states[self.num_layers], self.W_back)
+            return prod / math.sqrt(self.C)
+        if layer_idx == self.num_layers:
+            if y is None:
+                return torch.zeros_like(states[layer_idx])
+            return self.lambda_y * self.sign(y)
+        return self.lambda_right * states[layer_idx + 1]
 
     def local_field(
         self,
@@ -119,93 +176,49 @@ class TorchClassifier:
         ignore_right: bool = False,
     ):
         """
-        Computes the local field for a given layer (batched).
-        :param layer_idx: index of the layer (0..num_layers for readout).
-        :param states: list of state tensors for each layer.
-        :param x: input tensor of shape (batch, N).
-        :param y: target tensor of shape (batch, C).
-        :param ignore_right: if True, omit the contribution from the next layer/external field.
-        :return: tensor of local fields, shape matching the state at layer_idx.
+        Computes the local field perceived by neurons in a given layer.
+        It sums the internal, left, and right fields.
         """
-        # Internal field (only for hidden layers)
-        if layer_idx < self.num_layers:
-            internal = torch.matmul(states[layer_idx], self.couplings[layer_idx].t())
-        else:
-            internal = torch.zeros_like(states[layer_idx])
-
-        # Left field
-        if layer_idx == 0:
-            left = (
-                self.lambda_x * x
-                if x is not None
-                else torch.zeros_like(states[layer_idx])
-            )
-        elif layer_idx == self.num_layers:
-            left = torch.matmul(
-                states[self.num_layers - 1], self.W_forth.t()
-            ) / math.sqrt(self.N)
-        else:
-            left = self.lambda_left * states[layer_idx - 1]
-
-        # Right field
-        if ignore_right:
-            right = torch.zeros_like(states[layer_idx])
-        else:
-            if layer_idx == self.num_layers - 1:
-                right = torch.matmul(
-                    states[self.num_layers], self.W_back.t()
-                ) / math.sqrt(self.C)
-            elif layer_idx == self.num_layers:
-                right = (
-                    self.lambda_y * self.activation(y)
-                    if y is not None
-                    else torch.zeros_like(states[layer_idx])
-                )
-            else:
-                right = self.lambda_right * states[layer_idx + 1]
-
+        internal = self.internal_field(layer_idx, states)
+        left = self.left_field(layer_idx, states, x)
+        right = (
+            torch.zeros_like(states[layer_idx])
+            if ignore_right
+            else self.right_field(layer_idx, states, y)
+        )
         return internal + left + right
 
-    def relax(self, x: torch.Tensor, y: torch.Tensor = None, max_steps: int = 100):
+    def relax(
+        self,
+        states: list,
+        x: torch.Tensor,
+        y: torch.Tensor = None,
+        max_steps: int = 100,
+        ignore_right: bool = False,
+    ):
         """
         Synchronously relaxes the network to a stable state.
-        If x is provided, all hidden layers are initialized to x.
+        Uses initialize_state to set up the hidden layers (with x if provided)
+        and the readout layer (with y if provided).
+        :param states: list of initial state tensors for each layer.
         :param x: input tensor of shape (batch, N).
         :param y: target tensor of shape (batch, C). If provided, the readout layer is clamped.
         :param max_steps: maximum number of synchronous sweeps.
         :return: tuple (states, steps) where states is a list of state tensors for each layer.
         """
-        batch_size = x.shape[0]
-        # Initialize hidden layers: if x is provided, use it for all layers; otherwise, random init.
-        if x is not None:
-            states = [x.clone() for _ in range(self.num_layers)]
-        else:
-            states = [
-                self.initialize_state(batch_size, self.N)
-                for _ in range(self.num_layers)
-            ]
-
-        # Initialize readout layer. If target provided, use it; otherwise, random.
-        if y is not None:
-            states.append(y.clone().to(self.device).float())
-        else:
-            states.append(self.initialize_state(batch_size, self.C))
-
         steps = 0
         while steps < max_steps:
             steps += 1
             new_states = []
-            for l in range(self.num_layers + 1):
-                lf = self.local_field(l, states, x, y, ignore_right=False)
-                new_state = self.activation(lf)
-                if l == self.num_layers and y is not None:
-                    new_state = y.clone().to(self.device).float()
+            for layer_idx in range(self.num_layers + 1):
+                local_field = self.local_field(
+                    layer_idx, states, x, y, ignore_right=ignore_right
+                )
+                new_state = self.sign(local_field)
                 new_states.append(new_state)
-            # Check convergence: all layers must be exactly equal.
             if all(torch.equal(old, new) for old, new in zip(states, new_states)):
                 break
             states = new_states
-
         logging.info(f"Relaxation converged in {steps} steps")
         return states, steps
 
@@ -221,42 +234,44 @@ class TorchClassifier:
         :param threshold: stability threshold.
         :return: total number of updates performed.
         """
-        batch_size = x.shape[0]
         total_updates = 0
 
-        # Update internal couplings for hidden layers.
-        for l in range(self.num_layers):
-            lf = self.local_field(l, states, x, y=None, ignore_right=True)
-            s = states[l]
-            cond = (lf * s) <= threshold
+        for layer_idx in range(self.num_layers):
+            local_field = self.local_field(
+                layer_idx, states, x, y=None, ignore_right=True
+            )
+            s = states[layer_idx]
+            cond = (local_field * s) <= threshold
             total_updates += cond.sum().item()
-            delta_J = lr * torch.matmul((cond.float() * s).t(), s)
-            self.couplings[l] = self.couplings[l] + delta_J
-            self.couplings[l].fill_diagonal_(self.J_D)
-
-        # Update readout weights.
-        s_last = states[self.num_layers - 1]
-        s_readout = states[self.num_layers]
-        lf_last = self.local_field(
-            self.num_layers - 1, states, x, y=None, ignore_right=True
-        )
-        cond_last = (lf_last * s_last) <= threshold
-        total_updates += cond_last.sum().item()
-        delta_W_back = lr * torch.matmul(s_readout.t(), cond_last.float() * s_last)
-        self.W_back = self.W_back + delta_W_back
-
-        lf_readout = self.local_field(
-            self.num_layers, states, x, y=None, ignore_right=True
-        )
-        cond_readout = (lf_readout * s_readout) <= threshold
-        total_updates += cond_readout.sum().item()
-        delta_W_forth = lr * torch.matmul(
-            (cond_readout.float() * s_readout).t(), s_last
-        )
-        self.W_forth = self.W_forth + delta_W_forth
+            delta_J = lr * torch.matmul(
+                (cond.float() * s).t(), s
+            )  # TODO: why the transpose?
+            self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
+            self.couplings[layer_idx].fill_diagonal_(self.J_D)
 
         logging.info(f"Perceptron rule updates: total updates = {total_updates}")
         return total_updates
+
+        # # Update readout weights --> needs checking
+        # s_last = states[self.num_layers - 1]
+        # s_readout = states[self.num_layers]
+        # lf_last = self.local_field(
+        #     self.num_layers - 1, states, x, y=None, ignore_right=True
+        # )
+        # cond_last = (lf_last * s_last) <= threshold
+        # total_updates += cond_last.sum().item()
+        # delta_W_back = lr * torch.matmul(s_readout.t(), cond_last.float() * s_last)
+        # self.W_back = self.W_back + delta_W_back
+
+        # lf_readout = self.local_field(
+        #     self.num_layers, states, x, y=None, ignore_right=True
+        # )
+        # cond_readout = (lf_readout * s_readout) <= threshold
+        # total_updates += cond_readout.sum().item()
+        # delta_W_forth = lr * torch.matmul(
+        #     (cond_readout.float() * s_readout).t(), s_last
+        # )
+        # self.W_forth = self.W_forth + delta_W_forth
 
     def train_step(
         self,
@@ -275,8 +290,9 @@ class TorchClassifier:
         :param threshold: stability threshold.
         :return: tuple (sweeps, num_updates)
         """
-        states, sweeps = self.relax(x, y, max_steps)
-        num_updates = self.perceptron_rule_update(states, x, lr, threshold)
+        initial_states = self.initialize_state(x.shape[0], x, y)
+        final_states, sweeps = self.relax(initial_states, x, y, max_steps)
+        num_updates = self.perceptron_rule_update(final_states, x, lr, threshold)
         return sweeps, num_updates
 
     def inference(self, x: torch.Tensor, max_steps: int):
@@ -286,11 +302,10 @@ class TorchClassifier:
         :param max_steps: maximum relaxation sweeps.
         :return: tuple (logits, states) where logits is the output of the readout layer.
         """
-        states, steps = self.relax(x, y=None, max_steps=max_steps)
-        logits = self.local_field(
-            self.num_layers, states, x, y=None, ignore_right=False
-        )
-        return logits, states
+        initial_states = self.initialize_state(x.shape[0], x)
+        final_states, _ = self.relax(initial_states, x, y=None, max_steps=max_steps)
+        logits = self.left_field(self.num_layers, final_states)
+        return logits, final_states
 
     def evaluate(self, inputs: torch.Tensor, targets: torch.Tensor, max_steps: int):
         """
@@ -300,12 +315,25 @@ class TorchClassifier:
         :param max_steps: maximum relaxation sweeps.
         :return: tuple (accuracy, logits)
         """
-        logits, _ = self.inference(inputs, max_steps)
+        logits, fixed_points = self.inference(inputs, max_steps)
         predictions = torch.argmax(logits, dim=1)
         ground_truth = torch.argmax(targets, dim=1)
         accuracy = (predictions == ground_truth).float().mean().item()
-        logging.info(f"Evaluation accuracy: {accuracy:.3f}")
-        return accuracy, logits
+        accuracy_per_class = {}
+        for cls in range(self.C):
+            cls_mask = ground_truth == cls
+            accuracy_per_class[cls] = (
+                (predictions[cls_mask] == cls).float().mean().item()
+            )
+        return {
+            "overall_accuracy": accuracy,
+            "accuracy_by_class": accuracy_per_class,
+            "predictions": predictions,
+            "fixed_points": {
+                idx: fixed_points[idx].cpu().numpy() for idx in range(len(fixed_points))
+            },
+            "logits": logits,
+        }
 
     def train_epoch(
         self,
@@ -378,22 +406,26 @@ class TorchClassifier:
             sweeps, updates = self.train_epoch(
                 inputs, targets, max_steps, lr, threshold, batch_size
             )
-            accuracy, _ = self.evaluate(inputs, targets, max_steps)
+            train_metrics = self.evaluate(inputs, targets, max_steps)
             avg_sweeps = torch.tensor(sweeps).float().mean().item()
             avg_updates = torch.tensor(updates).float().mean().item()
             logging.info(
-                f"Epoch {epoch + 1}/{num_epochs}: train accuracy: {accuracy:.3f}, "
-                f"avg sweeps: {avg_sweeps:.3f}, avg updates: {avg_updates:.3f}"
+                f"Epoch {epoch + 1}/{num_epochs}:\n"
+                f"train accuracy: {train_metrics['overall_accuracy']:.3f}\n"
+                f"Average number of full sweeps: {avg_sweeps:.3f}\n"
+                f"Average fraction of perceptron rule updates per full sweep: {avg_updates / (self.num_layers * self.N + self.C):.3f}\n"
             )
-            train_acc_history.append(accuracy)
+            train_acc_history.append(train_metrics["overall_accuracy"])
             if (
                 (epoch + 1) % eval_interval == 0
                 and eval_inputs is not None
                 and eval_targets is not None
             ):
-                val_accuracy, _ = self.evaluate(eval_inputs, eval_targets, max_steps)
-                logging.info(f"Validation accuracy: {val_accuracy:.3f}")
-                eval_acc_history.append(val_accuracy)
+                eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
+                logging.info(
+                    f"Validation accuracy: {eval_metrics['overall_accuracy']:.3f}"
+                )
+                eval_acc_history.append(eval_metrics["overall_accuracy"])
         return train_acc_history, eval_acc_history
 
     def plot_fields_histograms(
@@ -407,8 +439,8 @@ class TorchClassifier:
         :param max_steps: maximum relaxation sweeps for obtaining a fixed point.
         :return: tuple of figures (fields figure, total fields figure)
         """
-        # Obtain relaxed states from the network.
-        states, _ = self.relax(x, y, max_steps)
+        initial_states = self.initialize_state(x.shape[0], x, y)
+        final_states, _ = self.relax(initial_states, x, y, max_steps)
         total_layers = self.num_layers + 1
         n_cols = math.ceil(total_layers / 2)
         fig_fields, axs_fields = plt.subplots(2, n_cols, figsize=(5 * n_cols, 8))
@@ -416,39 +448,14 @@ class TorchClassifier:
         axs_fields = axs_fields.flatten()
         axs_total = axs_total.flatten()
 
-        # For each layer, compute the components.
         for l in range(total_layers):
-            # Internal field.
-            if l < self.num_layers:
-                internal = torch.matmul(states[l], self.couplings[l].t())
-            else:
-                internal = torch.zeros_like(states[l])
-            # Left field.
-            if l == 0:
-                left = self.lambda_x * x
-            elif l == self.num_layers:
-                left = torch.matmul(
-                    states[self.num_layers - 1], self.W_forth.t()
-                ) / math.sqrt(self.N)
-            else:
-                left = self.lambda_left * states[l - 1]
-            # Right field.
-            if l == self.num_layers - 1:
-                right = torch.matmul(
-                    states[self.num_layers], self.W_back.t()
-                ) / math.sqrt(self.C)
-            elif l == self.num_layers:
-                right = (
-                    self.lambda_y * self.activation(y)
-                    if y is not None
-                    else torch.zeros_like(states[l])
-                )
-            else:
-                right = self.lambda_right * states[l + 1]
-
+            # Compute each field using the new helper functions.
+            internal = self.internal_field(l, final_states)
+            left = self.left_field(l, final_states, x)
+            right = self.right_field(l, final_states, y)
             total_field = internal + left + right
 
-            # Move to CPU and convert to numpy.
+            # Move tensors to CPU and convert to numpy for plotting.
             internal_np = internal.cpu().detach().numpy().flatten()
             left_np = left.cpu().detach().numpy().flatten()
             right_np = right.cpu().detach().numpy().flatten()
