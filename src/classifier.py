@@ -55,6 +55,7 @@ class Classifier:
         J_D: float,
         rng: Optional[np.random.Generator] = None,
         sparse_readout: bool = True,
+        train_readout: bool = False,
     ):
         """Initializes the classifier. \\
         :param num_layers: number of layers. \\
@@ -77,6 +78,7 @@ class Classifier:
         self.lambda_y = lambda_y
         self.J_D = J_D
         self.sparse_readout = sparse_readout
+        self.train_readout = train_readout
 
         rng = np.random.default_rng() if rng is None else rng
         self.initialize_state(rng)
@@ -105,10 +107,12 @@ class Classifier:
     def initialize_couplings(self, rng: Optional[np.random.Generator] = None):
         """Initializes the couplings of the network."""
         rng = np.random.default_rng() if rng is None else rng
-        self.couplings = [
+        couplings = [
             initialize_J(self.N, self.J_D, rng) for _ in range(self.num_layers)
-        ]  # num_layers, N, N
-        self.W = initialize_readout_weights(self.N, self.C, rng)  # C, N
+        ]
+        self.couplings = couplings  # num_layers, N, N
+        self.W_forth = initialize_readout_weights(self.N, self.C, rng)  # C, N
+        self.W_back = self.W_forth  # C, N. Symmetric weights!
 
     def internal_field(self, layer_idx: int, neuron_idx: int):
         """Field due to interaction within each layer."""
@@ -126,7 +130,7 @@ class Classifier:
             return self.lambda_x * x[neuron_idx]
         if layer_idx == self.num_layers:
             return np.dot(
-                self.W[neuron_idx, :], self.layers[self.num_layers - 1]
+                self.W_forth[neuron_idx, :], self.layers[self.num_layers - 1]
             ) / np.sqrt(self.N)
         return self.lambda_left * self.layers[layer_idx - 1][neuron_idx]
 
@@ -135,7 +139,7 @@ class Classifier:
     ):
         """Field due to interaction with next layer, or with right external field."""
         if layer_idx == self.num_layers - 1:
-            prod = np.dot(self.W[:, neuron_idx], self.layers[self.num_layers])
+            prod = np.dot(self.W_back[:, neuron_idx], self.layers[self.num_layers])
             return prod / np.sqrt(self.C) if not self.sparse_readout else prod
         if layer_idx == self.num_layers:
             if y is None:
@@ -208,7 +212,7 @@ class Classifier:
         :param threshold: stability threshold.
         :param x: input.
         """
-        count = 0
+        internal_count, readout_count = 0, 0
         for layer_idx in range(self.num_layers):
             for neuron_idx in range(self.N):
                 local_field = self.local_field(
@@ -217,12 +221,33 @@ class Classifier:
                 local_state = self.layers[layer_idx][neuron_idx]
                 if local_field * local_state > threshold:
                     continue
-                count += 1
+                internal_count += 1
                 self.couplings[layer_idx][neuron_idx, :] += (
                     lr * local_state * self.layers[layer_idx][:]
                 )  # NOTE: this does not interfere with the local field computation in subsequent updates within the same sweep
                 self.couplings[layer_idx][neuron_idx, neuron_idx] = self.J_D
-        return count
+
+        if self.train_readout:
+            for neuron_idx in range(self.N):
+                local_field = self.local_field(
+                    self.num_layers - 1, neuron_idx, x=x, y=None, ignore_right=True
+                )  # NOTE: ignore_right=True is strange here...
+                local_state = self.layers[self.num_layers - 1][neuron_idx]
+                if local_field * local_state > threshold:
+                    continue
+                readout_count += 1
+                self.W_back[:, neuron_idx] += lr * local_state * self.layers[-1]
+            for neuron_idx in range(self.C):
+                local_field = self.local_field(
+                    self.num_layers, neuron_idx, x=x, y=None, ignore_right=True
+                )
+                local_state = self.layers[self.num_layers][neuron_idx]
+                if local_field * local_state > threshold:
+                    continue
+                readout_count += 1
+                self.W_forth[neuron_idx, :] += lr * local_state * self.layers[-2]
+
+        return internal_count
 
     def train_step(
         self,
