@@ -7,9 +7,9 @@ import numpy as np
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
-from src.classifier import Classifier
+from src.classifier.classifier import Classifier
+from src.classifier.sparse_couplings_classifier import SparseCouplingsClassifier
 from src.data import get_balanced_dataset
-from src.sparse_couplings_classifier import SparseCouplingsClassifier
 from src.utils import (
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,

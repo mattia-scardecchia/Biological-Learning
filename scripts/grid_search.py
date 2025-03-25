@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 from hydra.core.hydra_config import HydraConfig
 
-from src.classifier import Classifier
+from src.classifier.classifier import Classifier
+from src.classifier.sparse_couplings_classifier import SparseCouplingsClassifier
 from src.data import get_balanced_dataset
-from src.sparse_couplings_classifier import SparseCouplingsClassifier
 
 HYPERPARAM_GRID = {
     "lr": [0.007, 0.005, 0.003, 0.001],
@@ -18,6 +18,7 @@ HYPERPARAM_GRID = {
     "lambda_x": [4.0, 5.0, 6.0],
     "J_D": [0.2, 0.4],
 }
+
 
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
 def main(cfg):
@@ -96,7 +97,10 @@ def main(cfg):
             rng,
         )
 
-        max_train_acc, final_train_acc = np.max(train_acc_history), train_acc_history[-1]
+        max_train_acc, final_train_acc = (
+            np.max(train_acc_history),
+            train_acc_history[-1],
+        )
         max_eval_acc, final_eval_acc = np.max(eval_acc_history), eval_acc_history[-1]
         result_row = {
             **hyperparams,
@@ -109,10 +113,10 @@ def main(cfg):
         # ================== Log results ==================
         df_row = pd.DataFrame([result_row])
         if not header_written:
-            df_row.to_csv(results_file, index=False, mode='w')
+            df_row.to_csv(results_file, index=False, mode="w")
             header_written = True
         else:
-            df_row.to_csv(results_file, index=False, mode='a', header=False)
+            df_row.to_csv(results_file, index=False, mode="a", header=False)
         logging.info(
             f"Summary.\nParams: {hyperparams}\nFinal Train Acc: {final_train_acc:.2f}, Max Eval Acc: {max_eval_acc:.2f}\n"
         )
