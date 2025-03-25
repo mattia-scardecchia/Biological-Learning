@@ -88,12 +88,7 @@ class TorchClassifier:
                 initialize_layer(batch_size, self.N, self.device, self.generator)
                 for _ in range(self.num_layers)
             ]
-        if y is not None:
-            states.append(y.clone().to(self.device).float())
-        else:
-            states.append(
-                initialize_layer(batch_size, self.C, self.device, self.generator)
-            )
+        states.append(initialize_layer(batch_size, self.C, self.device, self.generator))
         return states
 
     def initialize_J(self):
@@ -219,7 +214,7 @@ class TorchClassifier:
             if all(torch.equal(old, new) for old, new in zip(states, new_states)):
                 break
             states = new_states
-        logging.info(f"Relaxation converged in {steps} steps")
+        logging.debug(f"Relaxation converged in {steps} steps")
         return states, steps
 
     def perceptron_rule_update(
@@ -249,7 +244,7 @@ class TorchClassifier:
             self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
             self.couplings[layer_idx].fill_diagonal_(self.J_D)
 
-        logging.info(f"Perceptron rule updates: total updates = {total_updates}")
+        logging.debug(f"Perceptron rule updates: {total_updates}")
         return total_updates
 
         # # Update readout weights --> needs checking
@@ -303,7 +298,9 @@ class TorchClassifier:
         :return: tuple (logits, states) where logits is the output of the readout layer.
         """
         initial_states = self.initialize_state(x.shape[0], x)
-        final_states, _ = self.relax(initial_states, x, y=None, max_steps=max_steps)
+        final_states, _ = self.relax(
+            initial_states, x, y=None, max_steps=max_steps, ignore_right=True
+        )
         logits = self.left_field(self.num_layers, final_states)
         return logits, final_states
 
@@ -411,9 +408,9 @@ class TorchClassifier:
             avg_updates = torch.tensor(updates).float().mean().item()
             logging.info(
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
-                f"train accuracy: {train_metrics['overall_accuracy']:.3f}\n"
-                f"Average number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Average fraction of perceptron rule updates per full sweep: {avg_updates / (self.num_layers * self.N + self.C):.3f}\n"
+                f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
+                f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
+                f"Avg fraction of updates per sweep: {avg_updates / (self.num_layers * self.N + self.C):.3f}\n"
             )
             train_acc_history.append(train_metrics["overall_accuracy"])
             if (
@@ -422,9 +419,7 @@ class TorchClassifier:
                 and eval_targets is not None
             ):
                 eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
-                logging.info(
-                    f"Validation accuracy: {eval_metrics['overall_accuracy']:.3f}"
-                )
+                logging.info(f"Val Acc: {eval_metrics['overall_accuracy']:.3f}\n")
                 eval_acc_history.append(eval_metrics["overall_accuracy"])
         return train_acc_history, eval_acc_history
 

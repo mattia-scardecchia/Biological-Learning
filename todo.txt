@@ -1,4 +1,26 @@
 TODO:
+- debugga e matcha nuova implementazione con quella vecchia
+- estendila a stati 0/1
+
+
+
+Cambiamenti:
+- parallelizza! torch?
+- impara W --> fallo asimmetrico?
+- weight decay
+
+poi:
+- sparse couplings
+- sparse activations (0-1)
+- stati continui? -> delta rule
+- dinamica rappresentazioni?
+- parallelizazione su batch?
+- robustezza? a livello del perceptron rule update
+- dinamica con message passing?
+- coupling binari? confronta con 'regola che trova roba robusta'
+
+
+TODO:
 - improve logging:
     - track the distribution of couplings (preferrably the whole histogram + asymmetricity, maybe once per epoch)
 
