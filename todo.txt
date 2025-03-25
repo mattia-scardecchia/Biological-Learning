@@ -1,6 +1,9 @@
 TODO:
-- debugga e matcha nuova implementazione con quella vecchia
-- estendila a stati 0/1
+- raffina nuova implementazione:
+    - controlla che faccia quello che pensi
+    - attiva learning W e weight decay
+    - velocizzala
+    - estendila a stati 0/1
 
 
 
