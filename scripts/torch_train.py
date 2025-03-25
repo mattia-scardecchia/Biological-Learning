@@ -14,12 +14,10 @@ from src.utils import (
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_fixed_points_similarity_heatmap,
-    # Uncomment the following if you have an accuracy-by-class plot utility.
-    # plot_accuracy_by_class_barplot,
 )
 
 
-@hydra.main(config_path="../configs", config_name="train", version_base="1.3")
+@hydra.main(config_path="../configs", config_name="torch_train", version_base="1.3")
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
     train_data_dir = os.path.join(cfg.data.save_dir, "train")
@@ -137,4 +135,13 @@ def main(cfg):
 
 
 if __name__ == "__main__":
+    import cProfile
+    import pstats
+
+    profiler = cProfile.Profile()
+    profiler.enable()
     main()
+    profiler.disable()
+    stats = pstats.Stats(profiler).sort_stats("cumtime")
+    stats.dump_stats("profile.stats")
+    stats.print_stats(20)

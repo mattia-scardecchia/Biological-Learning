@@ -70,7 +70,6 @@ class TorchClassifier:
             f"TorchClassifier initialized with {num_layers} hidden layers, N={N}, C={C} on {device}"
         )
 
-    @torch.inference_mode()
     def initialize_state(
         self, batch_size: int, x: torch.Tensor = None, y: torch.Tensor = None
     ):
@@ -94,7 +93,6 @@ class TorchClassifier:
         states.append(initialize_layer(batch_size, self.C, self.device, self.generator))
         return states
 
-    @torch.inference_mode()
     def initialize_J(self):
         """
         Initializes an internal coupling matrix of shape (N, N) with normal values
@@ -106,7 +104,6 @@ class TorchClassifier:
         J.fill_diagonal_(self.J_D)
         return J
 
-    @torch.inference_mode()
     def initialize_readout_weights(self):
         """
         Initializes the readout weight matrix (W_forth) of shape (C, N) with values -1 or 1.
@@ -121,16 +118,17 @@ class TorchClassifier:
         )
         return weights * 2 - 1
 
-    @torch.inference_mode()
     def sign(self, input: torch.Tensor):
         """
-        Sign activation function. Returns +1 if x>=0, else -1.
+        Sign activation function. Returns +1 if x > 0, -1 if x < 0, 0 if x == 0.
         """
-        pos = torch.tensor(1.0, device=self.device, dtype=input.dtype)
-        neg = torch.tensor(-1.0, device=self.device, dtype=input.dtype)
-        return torch.where(input > 0, pos, neg)
+        # This used to return 1 at x == 0. The reason was that, in the computation
+        # of the right field at the readout layer, where neurons feel the influence
+        # of the one-hot encoded target y, we needed to have -1 at 0 otherwise all
+        # components of the right field would be positive. Now, instead, we handle that
+        # case without calling sign, so we can use the optimized built-in function.
+        return torch.sign(input)
 
-    @torch.inference_mode()
     def internal_field(self, layer_idx: int, states: list):
         """
         Computes the internal field for a given layer.
@@ -141,7 +139,6 @@ class TorchClassifier:
             return torch.zeros_like(states[layer_idx])  # readout layer
         return torch.matmul(states[layer_idx], self.couplings[layer_idx].t())
 
-    @torch.inference_mode()
     def left_field(self, layer_idx: int, states: list, x: torch.Tensor = None):
         """Field due to interaction with previous layer, or with left external field."""
         if layer_idx == 0:
@@ -154,7 +151,6 @@ class TorchClassifier:
             ) / math.sqrt(self.N)
         return self.lambda_left * states[layer_idx - 1]
 
-    @torch.inference_mode()
     def right_field(self, layer_idx: int, states: list, y: torch.Tensor = None):
         """
         Computes the right field.
@@ -168,10 +164,9 @@ class TorchClassifier:
         if layer_idx == self.num_layers:
             if y is None:
                 return torch.zeros_like(states[layer_idx])
-            return self.lambda_y * self.sign(y)
+            return self.lambda_y * (2 * y - 1)  # NOTE: assume y is one-hot encoded
         return self.lambda_right * states[layer_idx + 1]
 
-    @torch.inference_mode()
     def local_field(
         self,
         layer_idx: int,
@@ -193,7 +188,6 @@ class TorchClassifier:
         )
         return internal + left + right
 
-    @torch.inference_mode()
     def relax(
         self,
         states: list,
@@ -228,7 +222,6 @@ class TorchClassifier:
         logging.debug(f"Relaxation converged in {steps} steps")
         return states, steps
 
-    @torch.inference_mode()
     def perceptron_rule_update(
         self, states: list, x: torch.Tensor, lr: float, threshold: float
     ):
@@ -250,9 +243,7 @@ class TorchClassifier:
             s = states[layer_idx]
             cond = (local_field * s) <= threshold
             total_updates += cond.sum().item()
-            delta_J = lr * torch.matmul(
-                (cond.float() * s).t(), s
-            )  # TODO: why the transpose?
+            delta_J = lr * torch.matmul((cond.float() * s).t(), s)
             self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
             self.couplings[layer_idx].fill_diagonal_(self.J_D)
 
@@ -280,7 +271,6 @@ class TorchClassifier:
         # )
         # self.W_forth = self.W_forth + delta_W_forth
 
-    @torch.inference_mode()
     def train_step(
         self,
         x: torch.Tensor,
@@ -303,7 +293,6 @@ class TorchClassifier:
         num_updates = self.perceptron_rule_update(final_states, x, lr, threshold)
         return sweeps, num_updates
 
-    @torch.inference_mode()
     def inference(self, x: torch.Tensor, max_steps: int):
         """
         Performs inference on a batch of inputs.
@@ -318,7 +307,6 @@ class TorchClassifier:
         logits = self.left_field(self.num_layers, final_states)
         return logits, final_states
 
-    @torch.inference_mode()
     def evaluate(self, inputs: torch.Tensor, targets: torch.Tensor, max_steps: int):
         """
         Evaluates the network on a batch of inputs.
@@ -347,7 +335,6 @@ class TorchClassifier:
             "logits": logits,
         }
 
-    @torch.inference_mode()
     def train_epoch(
         self,
         inputs: torch.Tensor,
@@ -440,7 +427,6 @@ class TorchClassifier:
                 eval_acc_history.append(eval_metrics["overall_accuracy"])
         return train_acc_history, eval_acc_history
 
-    @torch.inference_mode()
     def plot_fields_histograms(
         self, x: torch.Tensor, y: torch.Tensor = None, max_steps: int = 100
     ):
@@ -494,7 +480,6 @@ class TorchClassifier:
         fig_total.tight_layout(rect=(0, 0, 1, 0.97))
         return fig_fields, fig_total
 
-    @torch.inference_mode()
     def plot_couplings_histograms(self):
         """
         Plots histograms of the internal coupling values for each hidden layer.

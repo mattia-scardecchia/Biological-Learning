@@ -66,6 +66,7 @@ def main(cfg):
         "J_D": cfg.J_D,
         "rng": rng,
         "sparse_readout": cfg.sparse_readout,
+        "train_readout": cfg.train_readout,
     }
     if cfg.sparse_couplings:
         model_kwargs["sparsity_level"] = cfg.sparsity_level
