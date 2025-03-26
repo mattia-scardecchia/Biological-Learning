@@ -1,5 +1,7 @@
+import cProfile
 import logging
 import os
+import pstats
 import time
 
 import hydra
@@ -92,6 +94,9 @@ def main(cfg):
     plt.close(fig3)
 
     # ================== Training ==================
+    profiler = cProfile.Profile()
+    profiler.enable()
+
     t0 = time.time()
     train_acc_history, eval_acc_history, eval_representations = model.train_loop(
         cfg.num_epochs,
@@ -107,6 +112,10 @@ def main(cfg):
     )
     t1 = time.time()
     logging.info(f"Training took {t1 - t0:.2f} seconds")
+
+    profiler.disable()
+    stats = pstats.Stats(profiler).sort_stats("cumtime")
+    stats.dump_stats(f"profile-{cfg.device}.stats")
 
     # ================== Evaluation and Plotting ==================
     if not cfg.skip_final_eval:
@@ -156,12 +165,4 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    import cProfile
-    import pstats
-
-    profiler = cProfile.Profile()
-    profiler.enable()
     main()
-    profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats("cumtime")
-    stats.dump_stats("profile.stats")

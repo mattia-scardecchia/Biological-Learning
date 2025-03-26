@@ -24,7 +24,7 @@ skip_final_eval: true
 
 data:
   C: 10  # number of classes
-  P: 100  # patterns per class
+  P: 30  # patterns per class
   p: 0.4
   save_dir: 'data'
 
