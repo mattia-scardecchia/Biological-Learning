@@ -6,7 +6,7 @@ name: 'prova'
 seed: 42
 
 N: 500
-num_layers: 3
+num_layers: 5
 sparse_readout: false
 train_readout: true
 J_D: 0.2
@@ -27,5 +27,5 @@ eval_interval: 1
 data:
   C: 10  # number of classes
   P: 10  # patterns per class
-  p: 0.3
+  p: 0.35
   save_dir: 'data'
