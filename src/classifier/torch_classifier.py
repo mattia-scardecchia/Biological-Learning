@@ -210,15 +210,20 @@ class TorchClassifier:
         :return: tuple (states, steps) where states is a list of state tensors for each layer.
         """
         steps = 0
+        # unsats = []
         while steps < max_steps:
             steps += 1
+            # unsat, tot = 0, 0
             new_states = []
             for layer_idx in range(self.num_layers + 1):
                 local_field = self.local_field(
                     layer_idx, states, x, y, ignore_right=ignore_right
                 )
+                # unsat += ((local_field * states[layer_idx]) < 0).sum().item()
+                # tot += local_field.numel()
                 new_state = self.sign(local_field)
                 new_states.append(new_state)
+            # unsats.append(unsat / tot)
             if all(torch.equal(old, new) for old, new in zip(states, new_states)):
                 break
             states = new_states
@@ -244,9 +249,9 @@ class TorchClassifier:
                 layer_idx, states, x, y=None, ignore_right=True
             )
             s = states[layer_idx]
-            cond = (local_field * s) <= threshold
-            total_updates += cond.sum().item()
-            delta_J = lr * torch.matmul((cond.float() * s).t(), s)
+            is_unstable = (local_field * s) <= threshold
+            total_updates += is_unstable.sum().item()
+            delta_J = lr * torch.matmul((is_unstable.float() * s).t(), s)
             self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
             self.couplings[layer_idx].fill_diagonal_(self.J_D)
 
@@ -418,7 +423,7 @@ class TorchClassifier:
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
                 f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
                 f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Avg fraction of updates per sweep: {avg_updates / (self.num_layers * self.N + self.C):.3f}\n"
+                f"Avg fraction of updates per sweep: {avg_updates / ((self.num_layers * self.N + self.C) * batch_size):.3f}"
             )
             train_acc_history.append(train_metrics["overall_accuracy"])
             if (

@@ -87,8 +87,9 @@ class BatchMeIfYouCan:
             self.cpu_generator.manual_seed(seed)
 
         self.couplings = self.initialize_couplings()  # num_layers, N, N
-        self.diagonal_mask = torch.stack([torch.eye(N, device=device)] * num_layers)
-        assert self.couplings[self.diagonal_mask] == J_D
+        self.diagonal_mask = torch.stack(
+            [torch.eye(N, device=device, dtype=torch.bool)] * num_layers
+        )
         self.W_forth = self.initialize_readout_weights()  # C, N
         self.W_back = self.W_forth.clone()  # C, N
         self.W_forth /= math.sqrt(N)
@@ -186,9 +187,12 @@ class BatchMeIfYouCan:
         if y is None:
             y = torch.zeros(readout.shape, device=self.device)
         hidden_right = torch.cat(
-            [states[1:] * self.lambda_right, torch.matmul(readout, self.W_back)]
+            [
+                states[1:] * self.lambda_right,
+                torch.matmul(readout, self.W_back).unsqueeze(0),
+            ]
         )
-        readout_right = y.clone() * self.lambda_y
+        readout_right = (2 * y.clone() - 1) * self.lambda_y
         return hidden_right, readout_right
 
     def local_field(
@@ -224,17 +228,24 @@ class BatchMeIfYouCan:
         ignore_right: bool = False,
     ):
         steps = 0
+        unsats = []
         while steps < max_steps:
             steps += 1
             hidden_field, readout_field = self.local_field(
                 states, readout, x, y, ignore_right=ignore_right
             )
+            unsat = torch.mean(hidden_field * states < 0, dtype=torch.float).item()
+            unsats.append(unsat)
             new_states = self.sign(hidden_field)
             new_readout = self.sign(readout_field)
+            # logging.debug(
+            #     f"Relaxation step {steps}: flip rate = {1 - torch.mean(new_states == states, dtype=torch.float).item()}"
+            # )
             if torch.equal(readout, new_readout) and torch.equal(states, new_states):
                 break
             states, readout = new_states, new_readout
-        logging.debug(f"Relaxation converged in {steps} steps")
+        # if steps == max_steps:
+        #     logging.warning("Relaxation did not converge")
         return states, readout, steps
 
     def perceptron_rule_update(
@@ -247,7 +258,7 @@ class BatchMeIfYouCan:
         threshold: float,
     ):
         hidden_field, _ = self.local_field(states, readout, x, y, True)
-        is_unstable = ((hidden_field * states) < threshold).float()
+        is_unstable = ((hidden_field * states) <= threshold).float()
         delta_J = lr * torch.matmul((is_unstable * states).transpose(1, 2), states)
         delta_J[self.diagonal_mask] = 0
         self.couplings += delta_J
@@ -279,7 +290,7 @@ class BatchMeIfYouCan:
     def evaluate(self, x: torch.Tensor, y: torch.Tensor, max_steps: int):
         logits, states, readout = self.inference(x, max_steps)
         predictions = torch.argmax(logits, dim=1)
-        ground_truth = torch.argmax(targets, dim=1)
+        ground_truth = torch.argmax(y, dim=1)
         accuracy = (predictions == ground_truth).float().mean().item()
         accuracy_by_class = {}
         for cls in range(self.C):
@@ -373,7 +384,7 @@ class BatchMeIfYouCan:
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
                 f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
                 f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Avg fraction of updates per sweep: {avg_updates / (self.num_layers * self.N + self.C):.3f}\n"
+                f"Avg fraction of updates per sweep: {avg_updates / ((self.num_layers * self.N + self.C) * batch_size):.3f}"
             )
             train_acc_history.append(train_metrics["overall_accuracy"])
             if (
@@ -410,7 +421,7 @@ class BatchMeIfYouCan:
             ax.grid()
             ax.legend()
         for ax, title, W in zip(
-            axs[self.num_layers, self.num_layers + 2],
+            axs[self.num_layers : self.num_layers + 2],
             ["Readout Weights (Forth)", "Readout Weights (Back)"],
             [self.W_forth, self.W_back],
         ):
@@ -433,7 +444,7 @@ class BatchMeIfYouCan:
         self,
         x: Optional[torch.Tensor] = None,
         y: Optional[torch.Tensor] = None,
-        relax_first: bool = False,
+        relax_first: bool = True,
         max_steps: int = 100,
     ):
         """
@@ -463,7 +474,7 @@ class BatchMeIfYouCan:
 
         for layer_idx in range(total_layers):
             if layer_idx == self.num_layers:
-                internal = np.zeros_like(readout_left)
+                internal = np.zeros_like(readout_left).flatten()
                 left = readout_left.cpu().detach().numpy().flatten()
                 right = readout_right.cpu().detach().numpy().flatten()
                 total = readout_total.cpu().detach().numpy().flatten()

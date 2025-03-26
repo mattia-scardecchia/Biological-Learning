@@ -8,7 +8,8 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
-from src.classifier.torch_classifier import TorchClassifier
+from src.classifier.batch_me_if_you_can import BatchMeIfYouCan  # noqa
+from src.classifier.torch_classifier import TorchClassifier  # noqa
 from src.data import get_balanced_dataset
 from src.utils import (
     plot_accuracy_by_class_barplot,
@@ -72,7 +73,8 @@ def main(cfg):
         "device": cfg.device,  # e.g., "cpu" or "cuda"
         "seed": cfg.seed,
     }
-    model = TorchClassifier(**model_kwargs)
+    model_cls = BatchMeIfYouCan if cfg.hardcore_parallel else TorchClassifier
+    model = model_cls(**model_kwargs)
 
     # ================== Initial Plots ==================
     init_plots_dir = os.path.join(output_dir, "init")

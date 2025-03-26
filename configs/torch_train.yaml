@@ -5,7 +5,7 @@ defaults:
 name: 'prova'
 seed: 42
 device: 'cpu'
-batch_size: 1
+batch_size: 4
 
 N: 500
 num_layers: 5
@@ -27,3 +27,5 @@ data:
   P: 30  # patterns per class
   p: 0.35
   save_dir: 'data'
+
+hardcore_parallel: false
