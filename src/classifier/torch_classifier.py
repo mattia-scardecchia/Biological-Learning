@@ -129,6 +129,7 @@ class TorchClassifier:
         # of the one-hot encoded target y, we needed to have -1 at 0 otherwise all
         # components of the right field would be positive. Now, instead, we handle that
         # case without calling sign, so we can use the optimized built-in function.
+        # This ofc has the problem of potentially introducing 0s in the state...
         return torch.sign(input)
 
     def internal_field(self, layer_idx: int, states: list):
@@ -291,9 +292,9 @@ class TorchClassifier:
         :return: tuple (sweeps, num_updates)
         """
         initial_states = self.initialize_state(x.shape[0], x, y)
-        final_states, sweeps = self.relax(initial_states, x, y, max_steps)
+        final_states, num_sweeps = self.relax(initial_states, x, y, max_steps)
         num_updates = self.perceptron_rule_update(final_states, x, lr, threshold)
-        return sweeps, num_updates
+        return num_sweeps, num_updates
 
     def inference(self, x: torch.Tensor, max_steps: int):
         """
@@ -321,15 +322,15 @@ class TorchClassifier:
         predictions = torch.argmax(logits, dim=1)
         ground_truth = torch.argmax(targets, dim=1)
         accuracy = (predictions == ground_truth).float().mean().item()
-        accuracy_per_class = {}
+        accuracy_by_class = {}
         for cls in range(self.C):
             cls_mask = ground_truth == cls
-            accuracy_per_class[cls] = (
+            accuracy_by_class[cls] = (
                 (predictions[cls_mask] == cls).float().mean().item()
             )
         return {
             "overall_accuracy": accuracy,
-            "accuracy_by_class": accuracy_per_class,
+            "accuracy_by_class": accuracy_by_class,
             "predictions": predictions,
             "fixed_points": {
                 idx: fixed_points[idx].cpu().numpy() for idx in range(len(fixed_points))
