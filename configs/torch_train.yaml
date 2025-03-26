@@ -16,7 +16,7 @@ lambda_x: 5.0
 lambda_y: 5.0
 
 num_epochs: 10
-max_steps: 20     # full sweeps over the network (relaxation)
+max_steps: 10     # full sweeps over the network (relaxation)
 lr: 0.003         # perceptron rule
 threshold: 1.5    # perceptron rule
 eval_interval: 1  # epochs
@@ -24,8 +24,8 @@ skip_final_eval: true
 
 data:
   C: 10  # number of classes
-  P: 30  # patterns per class
-  p: 0.35
+  P: 100  # patterns per class
+  p: 0.4
   save_dir: 'data'
 
 hardcore_parallel: true

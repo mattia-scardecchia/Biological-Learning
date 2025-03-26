@@ -74,11 +74,11 @@ class BatchMeIfYouCan:
         self.num_layers = num_layers
         self.N = N
         self.C = C
-        self.lambda_left = lambda_left
-        self.lambda_right = lambda_right
-        self.lambda_x = lambda_x
-        self.lambda_y = lambda_y
-        self.J_D = J_D
+        self.lambda_left = torch.tensor(lambda_left, device=device)
+        self.lambda_right = torch.tensor(lambda_right, device=device)
+        self.lambda_x = torch.tensor(lambda_x, device=device)
+        self.lambda_y = torch.tensor(lambda_y, device=device)
+        self.J_D = torch.tensor(J_D, device=device)
         self.device = device
         self.generator = torch.Generator(device=self.device)
         self.cpu_generator = torch.Generator(device="cpu")
@@ -187,7 +187,7 @@ class BatchMeIfYouCan:
         if x is None:
             x = torch.zeros(states[0].shape, device=self.device)
         hidden_left = torch.cat(
-            [x.clone().unsqueeze(0) * self.lambda_x, states[:-1] * self.lambda_left]
+            [x.unsqueeze(0) * self.lambda_x, states[:-1] * self.lambda_left]
         )
         readout_left = torch.matmul(states[-1], self.W_forth.T)
         return hidden_left, readout_left
@@ -287,40 +287,25 @@ class BatchMeIfYouCan:
             )
             new_states = self.sign(hidden_field)
             new_readout = self.sign(readout_field)
-            if torch.equal(readout, new_readout) and torch.equal(states, new_states):
-                break
+            # if torch.equal(readout, new_readout) and torch.equal(states, new_states):
+            #     break
             states, readout = new_states, new_readout
+
+        for _ in range(1):
+            for layer_idx in range(self.num_layers)[::-1]:
+                hidden_field = self.local_field_layer(
+                    states, readout, layer_idx, x, y, ignore_right=ignore_right
+                )
+                new_state = self.sign(hidden_field)
+                states[layer_idx] = new_state
+            local_field = self.local_field_layer(
+                states, readout, self.num_layers, x, y, ignore_right=ignore_right
+            )
+            new_readout = self.sign(local_field)
+            readout = new_readout
+
+        # print(self.num_unsat_neurons(states, readout, x, y))
         return states, readout, steps
-        # steps = 0
-        # unsatisfied_history = []
-        # while steps < max_steps:
-        #     step_unsatisfied = []
-        #     made_update = False
-        #     steps += 1
-        #     for layer_idx in range(self.num_layers):
-        #         local_field = self.local_field_layer(
-        #             states, readout, layer_idx, x, y, ignore_right=ignore_right
-        #         )
-        #         new_state = self.sign(local_field)
-        #         unsatisfied = (new_state != states[layer_idx]).sum().item()
-        #         step_unsatisfied.append(unsatisfied)
-        #         made_update = made_update or not torch.equal(
-        #             states[layer_idx], new_state
-        #         )
-        #         states[layer_idx] = new_state
-        #     local_field = self.local_field_layer(
-        #         states, readout, self.num_layers, x, y, ignore_right=ignore_right
-        #     )
-        #     new_readout = self.sign(local_field)
-        #     unsatisfied = (new_readout != readout).sum().item()
-        #     step_unsatisfied.append(unsatisfied)
-        #     made_update = made_update or not torch.equal(readout, new_readout)
-        #     readout = new_readout
-        #     unsatisfied_history.append(step_unsatisfied)
-        #     if not made_update:
-        #         break
-        # unsatisfied_history = torch.tensor(unsatisfied_history)
-        # return states, readout, steps
 
     def perceptron_rule_update(
         self,
@@ -494,7 +479,10 @@ class BatchMeIfYouCan:
                             for idx in range(self.num_layers)
                         ]
                     )
-        representations = {i: np.array(reps) for i, reps in representations.items()}
+        representations = {
+            i: np.array([t.cpu() for sublist in reps for t in sublist])
+            for i, reps in representations.items()
+        }
         return train_acc_history, eval_acc_history, representations
 
     def plot_couplings_histograms(self):
@@ -506,7 +494,7 @@ class BatchMeIfYouCan:
         fig, axs = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
         axs = axs.flatten()
         for layer_idx in range(self.num_layers):
-            couplings_np = self.couplings[layer_idx].cpu().detach().numpy().flatten()
+            couplings_np = self.couplings[layer_idx].cpu().numpy().flatten()
             ax = axs[layer_idx]
             ax.hist(couplings_np, bins=30, alpha=0.6, label="Couplings", color="purple")
             ax.set_title(f"Layer {layer_idx}")
@@ -518,7 +506,7 @@ class BatchMeIfYouCan:
             [self.W_forth, self.W_back],
         ):
             ax.hist(
-                W.cpu().detach().numpy().flatten(),
+                W.cpu().numpy().flatten(),
                 bins=30,
                 alpha=0.6,
                 label="Readout Weights",
@@ -566,15 +554,15 @@ class BatchMeIfYouCan:
 
         for layer_idx in range(total_layers):
             if layer_idx == self.num_layers:
-                internal = np.zeros_like(readout_left).flatten()
-                left = readout_left.cpu().detach().numpy().flatten()
-                right = readout_right.cpu().detach().numpy().flatten()
-                total = readout_total.cpu().detach().numpy().flatten()
+                internal = np.zeros_like(readout_left.cpu().numpy()).flatten()
+                left = readout_left.cpu().numpy().flatten()
+                right = readout_right.cpu().numpy().flatten()
+                total = readout_total.cpu().numpy().flatten()
             else:
-                internal = hidden_internal[layer_idx].cpu().detach().numpy().flatten()
-                left = hidden_left[layer_idx].cpu().detach().numpy().flatten()
-                right = hidden_right[layer_idx].cpu().detach().numpy().flatten()
-                total = hidden_total[layer_idx].cpu().detach().numpy().flatten()
+                internal = hidden_internal[layer_idx].cpu().numpy().flatten()
+                left = hidden_left[layer_idx].cpu().numpy().flatten()
+                right = hidden_right[layer_idx].cpu().numpy().flatten()
+                total = hidden_total[layer_idx].cpu().numpy().flatten()
             ax = axs_fields[layer_idx]
             ax.hist(internal, bins=30, alpha=0.6, label="Internal", color="blue")
             ax.hist(left, bins=30, alpha=0.6, label="Left", color="green")
@@ -595,3 +583,14 @@ class BatchMeIfYouCan:
         fig_fields.tight_layout(rect=(0, 0, 1, 0.97))
         fig_total.tight_layout(rect=(0, 0, 1, 0.97))
         return fig_fields, fig_total
+
+    def num_unsat_neurons(
+        self,
+        states,
+        readout,
+        x: Optional[torch.Tensor] = None,
+        y: Optional[torch.Tensor] = None,
+    ):
+        hidden_field, readout_field = self.local_field(states, readout, x, y)
+        is_unstable = ((hidden_field * states) <= 0).float()
+        return is_unstable.sum().item()
