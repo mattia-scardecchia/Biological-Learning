@@ -480,7 +480,7 @@ class BatchMeIfYouCan:
                         ]
                     )
         representations = {
-            i: np.array([t.cpu() for sublist in reps for t in sublist])
+            i: np.array([[t.cpu() for t in sublist] for sublist in reps])
             for i, reps in representations.items()
         }
         return train_acc_history, eval_acc_history, representations
