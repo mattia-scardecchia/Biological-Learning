@@ -1,7 +1,9 @@
 import logging
 import math
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 
@@ -403,6 +405,7 @@ class TorchClassifier:
             eval_interval = num_epochs + 1  # never evaluate
         train_acc_history = []
         eval_acc_history = []
+        representations = defaultdict(list)  # input, time, layer
         for epoch in range(num_epochs):
             sweeps, updates = self.train_epoch(
                 inputs, targets, max_steps, lr, threshold, batch_size
@@ -425,7 +428,15 @@ class TorchClassifier:
                 eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
                 logging.info(f"Val Acc: {eval_metrics['overall_accuracy']:.3f}\n")
                 eval_acc_history.append(eval_metrics["overall_accuracy"])
-        return train_acc_history, eval_acc_history
+                for i in range(len(eval_inputs)):
+                    representations[i].append(
+                        [
+                            eval_metrics["fixed_points"][idx][i]
+                            for idx in range(self.num_layers)
+                        ]
+                    )
+        representations = {i: np.array(reps) for i, reps in representations.items()}
+        return train_acc_history, eval_acc_history, representations
 
     def plot_fields_histograms(
         self, x: torch.Tensor, y: torch.Tensor = None, max_steps: int = 100

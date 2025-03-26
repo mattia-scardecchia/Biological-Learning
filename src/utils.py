@@ -1,6 +1,7 @@
 from typing import Dict, List
 
 import numpy as np
+import seaborn as sns
 from matplotlib import pyplot as plt
 
 DTYPE = np.float32
@@ -19,7 +20,8 @@ def plot_fixed_points_similarity_heatmap(
     with_flip_invariance: bool = False,
 ):
     """
-    :param fixed_points: dict with integer keys, each containing a list of fixed points
+    :param fixed_points: dict with integer keys, each representing a different layer.
+    The values are lists of numpy arrays of shape (N,), one for each input.
     """
     fig, axes = plt.subplots(1, len(fixed_points), figsize=(30, 10))
     for idx, ax in zip(fixed_points, axes):
@@ -70,4 +72,138 @@ def plot_accuracy_history(train_acc_history, eval_acc_history=None, eval_epochs=
     ax.set_title("Evolution of accuracy during training")
     ax.grid()
     ax.legend()
+    return fig
+
+
+def plot_representation_similarity_among_inputs(representations, epoch, layer_skip=1):
+    """
+    For a fixed epoch, plot a heatmap for each layer (or every kth layer) that shows the similarity
+    (1 - normalized Hamming distance) between representations of all input pairs.
+
+    Parameters:
+        representations: dict
+            Dictionary with integer keys. Each value is a numpy array of shape (T, L, N). T is the number of epochs,
+            L is the number of layers and N is the number of neurons per layer.
+        epoch: int
+            The epoch index to use.
+        layer_skip: int, optional (default=1)
+            Plot one every k layers.
+
+    Returns:
+        matplotlib.figure.Figure: The created figure object.
+    """
+    # Sort input keys for consistent ordering.
+    input_keys = sorted(representations.keys())
+    num_inputs = len(input_keys)
+    # Get number of layers from any representation.
+    _, L, N = representations[input_keys[0]].shape
+    selected_layers = list(range(0, L, layer_skip))
+
+    # Create a subplot for each selected layer (in one row).
+    fig, axes = plt.subplots(
+        1, len(selected_layers), figsize=(5 * len(selected_layers), 4)
+    )
+    if len(selected_layers) == 1:
+        axes = [axes]
+
+    for ax, layer in zip(axes, selected_layers):
+        # Build similarity matrix (num_inputs x num_inputs)
+        sim_matrix = np.zeros((num_inputs, num_inputs))
+        for i, key_i in enumerate(input_keys):
+            rep_i = representations[key_i][epoch, layer, :]  # vector of length N
+            for j, key_j in enumerate(input_keys):
+                rep_j = representations[key_j][epoch, layer, :]
+                # Compute normalized Hamming distance: fraction of mismatched bits
+                hamming = np.mean(rep_i != rep_j)
+                sim_matrix[i, j] = 1 - hamming
+        sns.heatmap(
+            sim_matrix, ax=ax, cmap="seismic", vmin=0, vmax=1, cbar=(ax == axes[-1])
+        )  # show colorbar only on last subplot
+        ax.set_title(f"Epoch {epoch}, Layer {layer}")
+        ax.set_xlabel("Input")
+        ax.set_ylabel("Input")
+
+    plt.tight_layout()
+    return fig
+
+
+def plot_representations_similarity_among_layers(
+    representations,
+    input_key=None,
+    num_epochs=3,
+    average_inputs=False,
+):
+    """
+    For each selected epoch, plot a heatmap that shows, for every pair of layers, the similarity
+    (1 - normalized Hamming distance) between the representations.
+
+    If average_inputs is False, a single input is used (specified by input_key).
+    If average_inputs is True, similarity is computed for each input and then averaged across all inputs.
+
+    Parameters:
+        representations: dict
+            Dictionary with integer keys. Each value is a numpy array of shape (T, L, N).
+        input_key: int, optional
+            The key corresponding to the input to consider (only used when average_inputs is False).
+        num_epochs: int, optional (default=3)
+            The approximate number of epochs to sample. The function determines epoch_skip as max(1, T//num_epochs).
+        average_inputs: bool, optional (default=False)
+            If True, average the similarity matrices across all inputs; otherwise, use a single input.
+
+    Returns:
+        matplotlib.figure.Figure: The created figure object.
+    """
+    if average_inputs:
+        # Get a list of all input keys and use one to determine the shape.
+        assert input_key is None, (
+            "input_key should be None when averaging across inputs."
+        )
+        input_keys = sorted(representations.keys())
+        rep0 = representations[input_keys[0]]  # shape: (T, L, N)
+    else:
+        if input_key is None:
+            raise ValueError(
+                "input_key must be provided if not averaging across inputs."
+            )
+        rep0 = representations[input_key]
+
+    T, L, N = rep0.shape
+    epoch_skip = max(1, T // num_epochs)
+    selected_epochs = list(range(0, T, epoch_skip))
+
+    # Create a subplot for each selected epoch (in one row).
+    fig, axes = plt.subplots(
+        1, len(selected_epochs), figsize=(5 * len(selected_epochs), 4)
+    )
+    if len(selected_epochs) == 1:
+        axes = [axes]
+
+    for ax, epoch in zip(axes, selected_epochs):
+        sim_matrix = np.zeros((L, L))
+        for l in range(L):
+            for m in range(L):
+                if average_inputs:
+                    sims = []
+                    for key in input_keys:
+                        rep = representations[key]  # shape: (T, L, N)
+                        rep_l = rep[epoch, l, :]
+                        rep_m = rep[epoch, m, :]
+                        hamming = np.mean(rep_l != rep_m)
+                        sims.append(1 - hamming)
+                    sim_matrix[l, m] = np.mean(sims)
+                else:
+                    rep = representations[input_key]
+                    rep_l = rep[epoch, l, :]
+                    rep_m = rep[epoch, m, :]
+                    hamming = np.mean(rep_l != rep_m)
+                    sim_matrix[l, m] = 1 - hamming
+
+        sns.heatmap(
+            sim_matrix, ax=ax, cmap="seismic", vmin=0, vmax=1, cbar=(ax == axes[-1])
+        )
+        ax.set_title(f"Epoch {epoch}")
+        ax.set_xlabel("Layer")
+        ax.set_ylabel("Layer")
+
+    plt.tight_layout()
     return fig

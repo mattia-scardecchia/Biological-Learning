@@ -14,6 +14,8 @@ from src.utils import (
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_fixed_points_similarity_heatmap,
+    plot_representation_similarity_among_inputs,
+    plot_representations_similarity_among_layers,
 )
 
 
@@ -90,7 +92,7 @@ def main(cfg):
 
     # ================== Training ==================
     t0 = time.time()
-    train_acc_history, eval_acc_history = model.train_loop(
+    train_acc_history, eval_acc_history, eval_representations = model.train_loop(
         cfg.num_epochs,
         train_inputs,
         train_targets,
@@ -105,13 +107,12 @@ def main(cfg):
     t1 = time.time()
     logging.info(f"Training took {t1 - t0:.2f} seconds")
 
-    # ================== Evaluation ==================
+    # ================== Evaluation and Plotting ==================
     eval_metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps)
     logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
     t2 = time.time()
     logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
 
-    # ================== Plotting Results ==================
     fig = plot_fixed_points_similarity_heatmap(eval_metrics["fixed_points"])
     plt.savefig(os.path.join(output_dir, "eval_representations_similarity.png"))
     plt.close(fig)
@@ -128,6 +129,26 @@ def main(cfg):
     fig = model.plot_couplings_histograms()
     fig.suptitle("Couplings at the end of training")
     plt.savefig(os.path.join(output_dir, "couplings.png"))
+    plt.close(fig)
+
+    representations_plots_dir = os.path.join(output_dir, "representations")
+    os.makedirs(representations_plots_dir, exist_ok=True)
+    for epoch in np.linspace(0, cfg.num_epochs - 1, 3).astype(int):
+        fig = plot_representation_similarity_among_inputs(
+            eval_representations, epoch, layer_skip=1
+        )
+        plt.savefig(os.path.join(representations_plots_dir, f"epoch_{epoch}.png"))
+        plt.close(fig)
+    for input_idx in np.random.choice(len(eval_inputs), 3, replace=False):
+        fig = plot_representations_similarity_among_layers(
+            eval_representations, input_idx, 5
+        )
+        plt.savefig(os.path.join(representations_plots_dir, f"input_{input_idx}.png"))
+        plt.close(fig)
+    fig = plot_representations_similarity_among_layers(
+        eval_representations, None, 5, True
+    )
+    plt.savefig(os.path.join(representations_plots_dir, "avg_over_inputs.png"))
     plt.close(fig)
 
     logging.info("Best train accuracy: {:.2f}".format(np.max(train_acc_history)))
