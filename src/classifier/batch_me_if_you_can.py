@@ -155,13 +155,30 @@ class BatchMeIfYouCan:
         # This ofc has the problem of potentially introducing 0s in the state...
         return torch.sign(input)
 
+    def internal_field_layer(self, states: torch.Tensor, layer_idx: int):
+        return torch.matmul(states[layer_idx], self.couplings[layer_idx].T)
+
     def internal_field(self, states: torch.Tensor):
         """
         For each neuron in the network, excluding those in the readout layer,
         computes the internal field.
         :param states: tensor of shape (num_layers, batch_size, N).
         """
-        return torch.matmul(states, self.couplings)
+        return torch.matmul(states, self.couplings.transpose(1, 2))
+
+    def left_field_layer(
+        self, states: torch.Tensor, layer_idx: int, x: Optional[torch.Tensor] = None
+    ):
+        match layer_idx:
+            case 0:
+                if x is None:
+                    # return torch.zeros_like(states[0])
+                    return 0
+                return x * self.lambda_x
+            case self.num_layers:
+                return torch.matmul(states[-1], self.W_forth.T)
+            case _:
+                return states[layer_idx - 1] * self.lambda_left
 
     def left_field(self, states: torch.Tensor, x: Optional[torch.Tensor] = None):
         """
@@ -175,6 +192,23 @@ class BatchMeIfYouCan:
         readout_left = torch.matmul(states[-1], self.W_forth.T)
         return hidden_left, readout_left
 
+    def right_field_layer(
+        self,
+        states: torch.Tensor,
+        layer_idx: int,
+        readout: torch.Tensor,
+        y: Optional[torch.Tensor] = None,
+    ):
+        if layer_idx == self.num_layers:
+            if y is None:
+                # return torch.zeros_like(readout)
+                return 0
+            return (2 * y.clone() - 1) * self.lambda_y
+        elif layer_idx == self.num_layers - 1:
+            return torch.matmul(readout, self.W_back)
+        else:
+            return states[layer_idx + 1] * self.lambda_right
+
     def right_field(
         self,
         states: torch.Tensor,
@@ -184,16 +218,34 @@ class BatchMeIfYouCan:
         """
         For each neuron in the network, computes the right field.
         """
-        if y is None:
-            y = torch.zeros(readout.shape, device=self.device)
         hidden_right = torch.cat(
             [
                 states[1:] * self.lambda_right,
                 torch.matmul(readout, self.W_back).unsqueeze(0),
             ]
         )
-        readout_right = (2 * y.clone() - 1) * self.lambda_y
+        readout_right = (2 * y - 1) * self.lambda_y if y is not None else 0
         return hidden_right, readout_right
+
+    def local_field_layer(
+        self,
+        states: torch.Tensor,
+        readout: torch.Tensor,
+        layer_idx: int,
+        x: Optional[torch.Tensor] = None,
+        y: Optional[torch.Tensor] = None,
+        ignore_right: bool = False,
+    ):
+        internal = (
+            self.internal_field_layer(states, layer_idx)
+            if layer_idx < self.num_layers
+            else torch.tensor(0, device=self.device)
+        )
+        left = self.left_field_layer(states, layer_idx, x)
+        right = self.right_field_layer(states, layer_idx, readout, y)
+        if ignore_right:
+            return internal + left
+        return internal + left + right
 
     def local_field(
         self,
@@ -228,25 +280,47 @@ class BatchMeIfYouCan:
         ignore_right: bool = False,
     ):
         steps = 0
-        unsats = []
         while steps < max_steps:
             steps += 1
             hidden_field, readout_field = self.local_field(
                 states, readout, x, y, ignore_right=ignore_right
             )
-            unsat = torch.mean(hidden_field * states < 0, dtype=torch.float).item()
-            unsats.append(unsat)
             new_states = self.sign(hidden_field)
             new_readout = self.sign(readout_field)
-            # logging.debug(
-            #     f"Relaxation step {steps}: flip rate = {1 - torch.mean(new_states == states, dtype=torch.float).item()}"
-            # )
             if torch.equal(readout, new_readout) and torch.equal(states, new_states):
                 break
             states, readout = new_states, new_readout
-        # if steps == max_steps:
-        #     logging.warning("Relaxation did not converge")
         return states, readout, steps
+        # steps = 0
+        # unsatisfied_history = []
+        # while steps < max_steps:
+        #     step_unsatisfied = []
+        #     made_update = False
+        #     steps += 1
+        #     for layer_idx in range(self.num_layers):
+        #         local_field = self.local_field_layer(
+        #             states, readout, layer_idx, x, y, ignore_right=ignore_right
+        #         )
+        #         new_state = self.sign(local_field)
+        #         unsatisfied = (new_state != states[layer_idx]).sum().item()
+        #         step_unsatisfied.append(unsatisfied)
+        #         made_update = made_update or not torch.equal(
+        #             states[layer_idx], new_state
+        #         )
+        #         states[layer_idx] = new_state
+        #     local_field = self.local_field_layer(
+        #         states, readout, self.num_layers, x, y, ignore_right=ignore_right
+        #     )
+        #     new_readout = self.sign(local_field)
+        #     unsatisfied = (new_readout != readout).sum().item()
+        #     step_unsatisfied.append(unsatisfied)
+        #     made_update = made_update or not torch.equal(readout, new_readout)
+        #     readout = new_readout
+        #     unsatisfied_history.append(step_unsatisfied)
+        #     if not made_update:
+        #         break
+        # unsatisfied_history = torch.tensor(unsatisfied_history)
+        # return states, readout, steps
 
     def perceptron_rule_update(
         self,
@@ -265,6 +339,18 @@ class BatchMeIfYouCan:
         num_updates = is_unstable.sum().item()
         logging.debug(f"Number of perceptron rule updates: {num_updates}")
         return num_updates
+        # total_updates = 0
+        # for layer_idx in range(self.num_layers):
+        #     hidden_field = self.local_field_layer(
+        #         states, readout, layer_idx, x, None, True
+        #     )
+        #     S = states[layer_idx]
+        #     is_unstable = (hidden_field * S) <= threshold
+        #     total_updates += is_unstable.sum().item()
+        #     delta_J = lr * torch.matmul((is_unstable.float() * S).T, S)
+        #     self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
+        #     self.couplings[layer_idx].fill_diagonal_(self.J_D)
+        # return total_updates
 
     def train_step(
         self,
@@ -282,9 +368,15 @@ class BatchMeIfYouCan:
     def inference(self, x: torch.Tensor, max_steps: int):
         initial_states, initial_readout = self.initialize_neurons_state(x.shape[0], x)
         states, readout, _ = self.relax(
-            initial_states, initial_readout, x, max_steps=max_steps, ignore_right=True
+            initial_states,
+            initial_readout,
+            x,
+            y=None,
+            max_steps=max_steps,
+            ignore_right=True,
         )
-        logits = torch.matmul(states[-1], self.W_forth.T)
+        # logits = torch.matmul(states[-1], self.W_forth.T)
+        logits = self.left_field_layer(states, self.num_layers, x)
         return logits, states, readout
 
     def evaluate(self, x: torch.Tensor, y: torch.Tensor, max_steps: int):
@@ -444,7 +536,7 @@ class BatchMeIfYouCan:
         self,
         x: Optional[torch.Tensor] = None,
         y: Optional[torch.Tensor] = None,
-        relax_first: bool = True,
+        relax_first: bool = False,
         max_steps: int = 100,
     ):
         """

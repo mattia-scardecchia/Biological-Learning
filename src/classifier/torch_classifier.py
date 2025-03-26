@@ -1,6 +1,7 @@
 import logging
 import math
 from collections import defaultdict
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,7 +34,7 @@ class TorchClassifier:
         lambda_y: float,
         J_D: float,
         device: str = "cpu",
-        seed: int = None,
+        seed: Optional[int] = None,
     ):
         """
         Initializes the classifier.
@@ -73,7 +74,9 @@ class TorchClassifier:
         )
 
     def initialize_state(
-        self, batch_size: int, x: torch.Tensor = None, y: torch.Tensor = None
+        self,
+        batch_size: int,
+        x: Optional[torch.Tensor] = None,
     ):
         """
         Initializes states for all layers (hidden and readout) for a given batch.
@@ -142,7 +145,9 @@ class TorchClassifier:
             return torch.zeros_like(states[layer_idx])  # readout layer
         return torch.matmul(states[layer_idx], self.couplings[layer_idx].t())
 
-    def left_field(self, layer_idx: int, states: list, x: torch.Tensor = None):
+    def left_field(
+        self, layer_idx: int, states: list, x: Optional[torch.Tensor] = None
+    ):
         """Field due to interaction with previous layer, or with left external field."""
         if layer_idx == 0:
             if x is None:
@@ -154,7 +159,9 @@ class TorchClassifier:
             ) / math.sqrt(self.N)
         return self.lambda_left * states[layer_idx - 1]
 
-    def right_field(self, layer_idx: int, states: list, y: torch.Tensor = None):
+    def right_field(
+        self, layer_idx: int, states: list, y: Optional[torch.Tensor] = None
+    ):
         """
         Computes the right field.
         - For the last hidden layer, it returns the projection from the readout state via W_back.
@@ -174,8 +181,8 @@ class TorchClassifier:
         self,
         layer_idx: int,
         states: list,
-        x: torch.Tensor = None,
-        y: torch.Tensor = None,
+        x: Optional[torch.Tensor] = None,
+        y: Optional[torch.Tensor] = None,
         ignore_right: bool = False,
     ):
         """
@@ -194,8 +201,8 @@ class TorchClassifier:
     def relax(
         self,
         states: list,
-        x: torch.Tensor,
-        y: torch.Tensor = None,
+        x: Optional[torch.Tensor] = None,
+        y: Optional[torch.Tensor] = None,
         max_steps: int = 100,
         ignore_right: bool = False,
     ):
@@ -210,24 +217,26 @@ class TorchClassifier:
         :return: tuple (states, steps) where states is a list of state tensors for each layer.
         """
         steps = 0
-        # unsats = []
+        unsatisfied_history = []
         while steps < max_steps:
+            step_unsatisfied = []
+            made_update = False
             steps += 1
-            # unsat, tot = 0, 0
-            new_states = []
             for layer_idx in range(self.num_layers + 1):
                 local_field = self.local_field(
                     layer_idx, states, x, y, ignore_right=ignore_right
                 )
-                # unsat += ((local_field * states[layer_idx]) < 0).sum().item()
-                # tot += local_field.numel()
                 new_state = self.sign(local_field)
-                new_states.append(new_state)
-            # unsats.append(unsat / tot)
-            if all(torch.equal(old, new) for old, new in zip(states, new_states)):
+                unsatisfied = (new_state != states[layer_idx]).sum().item()
+                step_unsatisfied.append(unsatisfied)
+                made_update = made_update or not torch.equal(
+                    states[layer_idx], new_state
+                )
+                states[layer_idx] = new_state
+            unsatisfied_history.append(step_unsatisfied)
+            if not made_update:
                 break
-            states = new_states
-        logging.debug(f"Relaxation converged in {steps} steps")
+        unsatisfied_history = torch.tensor(unsatisfied_history)
         return states, steps
 
     def perceptron_rule_update(
@@ -248,10 +257,10 @@ class TorchClassifier:
             local_field = self.local_field(
                 layer_idx, states, x, y=None, ignore_right=True
             )
-            s = states[layer_idx]
-            is_unstable = (local_field * s) <= threshold
+            S = states[layer_idx]
+            is_unstable = (local_field * S) <= threshold
             total_updates += is_unstable.sum().item()
-            delta_J = lr * torch.matmul((is_unstable.float() * s).t(), s)
+            delta_J = lr * torch.matmul((is_unstable.float() * S).T, S)
             self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
             self.couplings[layer_idx].fill_diagonal_(self.J_D)
 
@@ -296,7 +305,7 @@ class TorchClassifier:
         :param threshold: stability threshold.
         :return: tuple (sweeps, num_updates)
         """
-        initial_states = self.initialize_state(x.shape[0], x, y)
+        initial_states = self.initialize_state(x.shape[0], x)
         final_states, num_sweeps = self.relax(initial_states, x, y, max_steps)
         num_updates = self.perceptron_rule_update(final_states, x, lr, threshold)
         return num_sweeps, num_updates
@@ -388,9 +397,9 @@ class TorchClassifier:
         lr: float,
         threshold: float,
         batch_size: int,
-        eval_interval: int = None,
-        eval_inputs: torch.Tensor = None,
-        eval_targets: torch.Tensor = None,
+        eval_interval: Optional[int] = None,
+        eval_inputs: Optional[torch.Tensor] = None,
+        eval_targets: Optional[torch.Tensor] = None,
     ):
         """
         Trains the network for multiple epochs.
@@ -445,7 +454,7 @@ class TorchClassifier:
         return train_acc_history, eval_acc_history, representations
 
     def plot_fields_histograms(
-        self, x: torch.Tensor, y: torch.Tensor = None, max_steps: int = 100
+        self, x: torch.Tensor, y: Optional[torch.Tensor] = None, max_steps: int = 100
     ):
         """
         Plots histograms of the various field components (internal, left, right, total)
@@ -455,8 +464,9 @@ class TorchClassifier:
         :param max_steps: maximum relaxation sweeps for obtaining a fixed point.
         :return: tuple of figures (fields figure, total fields figure)
         """
-        initial_states = self.initialize_state(x.shape[0], x, y)
-        final_states, _ = self.relax(initial_states, x, y, max_steps)
+        initial_states = self.initialize_state(x.shape[0], x)
+        # final_states, _ = self.relax(initial_states, x, y, max_steps)
+        final_states = initial_states
         total_layers = self.num_layers + 1
         n_cols = math.ceil(total_layers / 2)
         fig_fields, axs_fields = plt.subplots(2, n_cols, figsize=(5 * n_cols, 8))

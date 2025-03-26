@@ -2,6 +2,7 @@ from typing import Dict, List
 
 import numpy as np
 import seaborn as sns
+import torch
 from matplotlib import pyplot as plt
 
 DTYPE = np.float32
@@ -207,3 +208,27 @@ def plot_representations_similarity_among_layers(
 
     plt.tight_layout()
     return fig
+
+
+def plot_time_series(tensor):
+    """
+    Plot each column of a (T, N) tensor as a separate time series in N horizontal subplots.
+
+    Parameters:
+        tensor (numpy.ndarray or torch.Tensor): 2D array of shape (T, N)
+    """
+    # Convert torch tensor to numpy array if needed.
+    if isinstance(tensor, torch.Tensor):
+        tensor = tensor.detach().cpu().numpy()
+
+    T, N = tensor.shape
+    fig, axes = plt.subplots(1, N, figsize=(5 * N, 4), squeeze=False)
+
+    for i in range(N):
+        axes[0, i].plot(tensor[:, i])
+        axes[0, i].set_title(f"Series {i}")
+        axes[0, i].set_xlabel("Time")
+        axes[0, i].set_ylabel("Value")
+
+    plt.tight_layout()
+    plt.show()
