@@ -320,7 +320,7 @@ class BatchMeIfYouCan:
         is_unstable = ((hidden_field * states) <= threshold).float()
         delta_J = lr * torch.matmul((is_unstable * states).transpose(1, 2), states)
         delta_J[self.diagonal_mask] = 0
-        self.couplings += delta_J
+        self.couplings += delta_J / math.sqrt(x.shape[0])
         num_updates = is_unstable.sum().item()
         logging.debug(f"Number of perceptron rule updates: {num_updates}")
         return num_updates
