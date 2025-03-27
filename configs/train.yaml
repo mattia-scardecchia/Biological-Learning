@@ -6,20 +6,18 @@ defaults:
 name: 'prova'
 seed: 42
 device: 'cpu'
-batch_size: 32
+batch_size: 16
 
 N: 500
 num_layers: 5
 J_D: 0.2
-lambda_left: 2.0
-lambda_right: 2.0
-lambda_x: 5.0
-lambda_y: 5.0
+lambda_left: [5.0, 2.0, 2.0, 2.0, 2.0, 1.0]   # first is lambda_x, last affects the readout layer
+lambda_right: [2.0, 2.0, 2.0, 2.0, 1.0, 5.0]  # last is lambda_y, last but one affects the readout layer
 
-num_epochs: 10
-max_steps: 10       # full sweeps over the network (relaxation)
-lr: 0.012           # perceptron rule
-threshold: 1.5      # perceptron rule
-weight_decay: 0.0   # scaled by learning rate
-eval_interval: 1    # epochs
-skip_final_eval: true
+num_epochs: 20
+max_steps: 5                                                  # full sweeps over the network (relaxation)
+lr: [0.075, 0.075, 0.075, 0.075, 0.075, 0.00, 0.00]           # scaled by typical weight size. last two are for W_back and W_forth
+threshold: [1.5, 1.5, 1.5, 1.5, 1.5, 1.5]                     # perceptron rule. last is for readout layer
+weight_decay: [0.001, 0.001, 0.001, 0.001, 0.001, 0.0, 0.0]   # scaled by learning rate. last two are for W_back and W_forth
+eval_interval: 1                                              # epochs
+skip_final_eval: false

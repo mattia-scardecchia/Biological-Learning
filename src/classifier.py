@@ -50,23 +50,19 @@ class BatchMeIfYouCan:
         num_layers: int,
         N: int,
         C: int,
-        lambda_left: float,
-        lambda_right: float,
-        lambda_x: float,
-        lambda_y: float,
         J_D: float,
+        lambda_left: list[float],
+        lambda_right: list[float],
         device: str = "cpu",
-        seed: int = None,
+        seed: Optional[int] = None,
     ):
         """
         Initializes the classifier.
         :param num_layers: number of hidden layers.
         :param N: number of neurons per hidden layer.
         :param C: number of neurons in the readout layer.
-        :param lambda_left: coupling strength with the previous layer.
-        :param lambda_right: coupling strength with the next layer.
-        :param lambda_x: strength of coupling with the input.
-        :param lambda_y: strength of coupling with the target.
+        :param lambda_left: coupling strength with the previous layer. First element is lambda_x.
+        :param lambda_right: coupling strength with the next layer. Last element is lambda_y.
         :param J_D: self-interaction strength (diagonal of internal couplings).
         :param device: 'cpu' or 'cuda'.
         :param seed: optional random seed.
@@ -74,10 +70,9 @@ class BatchMeIfYouCan:
         self.num_layers = num_layers
         self.N = N
         self.C = C
+        assert len(lambda_left) == len(lambda_right) == num_layers + 1
         self.lambda_left = torch.tensor(lambda_left, device=device)
         self.lambda_right = torch.tensor(lambda_right, device=device)
-        self.lambda_x = torch.tensor(lambda_x, device=device)
-        self.lambda_y = torch.tensor(lambda_y, device=device)
         self.J_D = torch.tensor(J_D, device=device)
         self.device = device
         self.generator = torch.Generator(device=self.device)
@@ -96,7 +91,9 @@ class BatchMeIfYouCan:
         self.W_back /= math.sqrt(C)
 
         logging.info(f"Initialized classifier on device: {self.device}")
-        logging.info(f"Parameters: N={N}, C={C}, num_layers={num_layers}")
+        logging.info(
+            f"Parameters: N={N}, C={C}, num_layers={num_layers}, J_D={J_D}, lambda_left={lambda_left}, lambda_right={lambda_right}"
+        )
 
     def initialize_couplings(self):
         """
@@ -172,13 +169,12 @@ class BatchMeIfYouCan:
         match layer_idx:
             case 0:
                 if x is None:
-                    # return torch.zeros_like(states[0])
                     return 0
-                return x * self.lambda_x
+                return x * self.lambda_left[0]
             case self.num_layers:
-                return torch.matmul(states[-1], self.W_forth.T)
+                return torch.matmul(states[-1], self.W_forth.T) * self.lambda_left[-1]
             case _:
-                return states[layer_idx - 1] * self.lambda_left
+                return states[layer_idx - 1] * self.lambda_left[layer_idx]
 
     def left_field(self, states: torch.Tensor, x: Optional[torch.Tensor] = None):
         """
@@ -187,9 +183,12 @@ class BatchMeIfYouCan:
         if x is None:
             x = torch.zeros(states[0].shape, device=self.device)
         hidden_left = torch.cat(
-            [x.unsqueeze(0) * self.lambda_x, states[:-1] * self.lambda_left]
+            [
+                x.unsqueeze(0) * self.lambda_left[0],
+                states[:-1] * self.lambda_left[1:-1, None, None],
+            ]
         )
-        readout_left = torch.matmul(states[-1], self.W_forth.T)
+        readout_left = torch.matmul(states[-1], self.W_forth.T) * self.lambda_left[-1]
         return hidden_left, readout_left
 
     def right_field_layer(
@@ -201,13 +200,12 @@ class BatchMeIfYouCan:
     ):
         if layer_idx == self.num_layers:
             if y is None:
-                # return torch.zeros_like(readout)
                 return 0
-            return (2 * y - 1) * self.lambda_y
+            return (2 * y - 1) * self.lambda_right[-1]
         elif layer_idx == self.num_layers - 1:
-            return torch.matmul(readout, self.W_back)
+            return torch.matmul(readout, self.W_back) * self.lambda_right[-2]
         else:
-            return states[layer_idx + 1] * self.lambda_right
+            return states[layer_idx + 1] * self.lambda_right[layer_idx]
 
     def right_field(
         self,
@@ -220,11 +218,11 @@ class BatchMeIfYouCan:
         """
         hidden_right = torch.cat(
             [
-                states[1:] * self.lambda_right,
-                torch.matmul(readout, self.W_back).unsqueeze(0),
+                states[1:] * self.lambda_right[:-2, None, None],
+                torch.matmul(readout, self.W_back).unsqueeze(0) * self.lambda_right[-2],
             ]
         )
-        readout_right = (2 * y - 1) * self.lambda_y if y is not None else 0
+        readout_right = (2 * y - 1) * self.lambda_right[-1] if y is not None else 0
         return hidden_right, readout_right
 
     def local_field_layer(
@@ -290,22 +288,34 @@ class BatchMeIfYouCan:
             # if torch.equal(readout, new_readout) and torch.equal(states, new_states):
             #     break
             states, readout = new_states, new_readout
-
-        for _ in range(1):
-            for layer_idx in range(self.num_layers)[::-1]:
-                hidden_field = self.local_field_layer(
-                    states, readout, layer_idx, x, y, ignore_right=ignore_right
-                )
-                new_state = self.sign(hidden_field)
-                states[layer_idx] = new_state
-            local_field = self.local_field_layer(
-                states, readout, self.num_layers, x, y, ignore_right=ignore_right
-            )
-            new_readout = self.sign(local_field)
-            readout = new_readout
-
-        # print(self.num_unsat_neurons(states, readout, x, y))
+        # print(self.num_unsat_neurons(states, readout, x, y) / states.numel())
         return states, readout, steps
+
+    # def relax(
+    #     self,
+    #     states: torch.Tensor,
+    #     readout: torch.Tensor,
+    #     x: Optional[torch.Tensor] = None,
+    #     y: Optional[torch.Tensor] = None,
+    #     max_steps: int = 100,
+    #     ignore_right: bool = False,
+    # ):
+    #     steps = 0
+    #     while steps < max_steps:
+    #         steps += 1
+    #         for layer_idx in range(self.num_layers)[::-1]:
+    #             hidden_field = self.local_field_layer(
+    #                 states, readout, layer_idx, x, y, ignore_right=ignore_right
+    #             )
+    #             new_state = self.sign(hidden_field)
+    #             states[layer_idx] = new_state
+    #         readout_field = self.local_field_layer(
+    #             states, readout, self.num_layers, x, y, ignore_right=ignore_right
+    #         )
+    #         new_readout = self.sign(readout_field)
+    #         readout = new_readout
+    #     print(self.num_unsat_neurons(states, readout, x, y) / states.numel())
+    #     return states, readout, steps
 
     def perceptron_rule_update(
         self,
@@ -313,48 +323,61 @@ class BatchMeIfYouCan:
         readout: torch.Tensor,
         x: torch.Tensor,
         y: torch.Tensor,
-        lr: float,
-        threshold: float,
-        weight_decay: float,
+        lr: torch.Tensor,
+        threshold: torch.Tensor,
+        weight_decay: torch.Tensor,
     ):
-        hidden_field, _ = self.local_field(states, readout, x, y, True)
-        is_unstable = ((hidden_field * states) <= threshold).float()
-        delta_J = lr * torch.matmul((is_unstable * states).transpose(1, 2), states)
-        delta_J[self.diagonal_mask] = 0
-        self.couplings = self.couplings * (1 - lr * weight_decay) + delta_J / math.sqrt(
-            x.shape[0]
+        # update J
+        hidden_field, readout_field = self.local_field(states, readout, x, y, True)
+        is_unstable = ((hidden_field * states) <= threshold[:-1, None, None]).float()
+        delta_J = (
+            lr[:-2, None, None]
+            * torch.matmul((is_unstable * states).transpose(1, 2), states)
+            / math.sqrt(self.N)
+            / math.sqrt(x.shape[0])
         )
-        num_updates = is_unstable.sum().item()
-        logging.debug(f"Number of perceptron rule updates: {num_updates}")
-        return num_updates
-        # total_updates = 0
-        # for layer_idx in range(self.num_layers):
-        #     hidden_field = self.local_field_layer(
-        #         states, readout, layer_idx, x, None, True
-        #     )
-        #     S = states[layer_idx]
-        #     is_unstable = (hidden_field * S) <= threshold
-        #     total_updates += is_unstable.sum().item()
-        #     delta_J = lr * torch.matmul((is_unstable.float() * S).T, S)
-        #     self.couplings[layer_idx] = self.couplings[layer_idx] + delta_J
-        #     self.couplings[layer_idx].fill_diagonal_(self.J_D)
-        # return total_updates
+        self.couplings = (
+            self.couplings * (1 - weight_decay[:-2, None, None] * lr[:-2, None, None])
+            + delta_J
+        )
+        self.couplings[self.diagonal_mask] = self.J_D
+        fraction_updates = is_unstable.mean().item()
+
+        # update W_back
+        delta_W_back = (
+            (lr[-2] * torch.matmul((is_unstable[-1] * states[-1]).T, readout).T)
+            / math.sqrt(self.C)
+            / math.sqrt(x.shape[0])
+        )
+        self.W_back = self.W_back * (1 - weight_decay[-2] * lr[-2]) + delta_W_back
+
+        # update W_forth
+        is_unstable_readout = (readout_field * readout <= threshold[-1]).float()
+        delta_W_forth = (
+            lr[-1]
+            * torch.matmul((is_unstable_readout * readout).T, states[-1])
+            / math.sqrt(self.N)
+            / math.sqrt(x.shape[0])
+        )
+        self.W_forth = self.W_forth * (1 - weight_decay[-1] * lr[-1]) + delta_W_forth
+
+        return fraction_updates
 
     def train_step(
         self,
         x: torch.Tensor,
         y: torch.Tensor,
         max_steps: int,
-        lr: float,
-        threshold: float,
-        weight_decay: float,
+        lr: torch.Tensor,
+        threshold: torch.Tensor,
+        weight_decay: torch.Tensor,
     ):
         states, readout = self.initialize_neurons_state(x.shape[0], x)
         states, readout, num_sweeps = self.relax(states, readout, x, y, max_steps)
-        num_updates = self.perceptron_rule_update(
+        fraction_updates = self.perceptron_rule_update(
             states, readout, x, y, lr, threshold, weight_decay
         )
-        return num_sweeps, num_updates
+        return num_sweeps, fraction_updates
 
     def inference(self, x: torch.Tensor, max_steps: int):
         initial_states, initial_readout = self.initialize_neurons_state(x.shape[0], x)
@@ -395,9 +418,9 @@ class BatchMeIfYouCan:
         inputs: torch.Tensor,
         targets: torch.Tensor,
         max_steps: int,
-        lr: float,
-        threshold: float,
-        weight_decay: float,
+        lr: torch.Tensor,
+        threshold: torch.Tensor,
+        weight_decay: torch.Tensor,
         batch_size: int,
     ):
         """
@@ -418,11 +441,11 @@ class BatchMeIfYouCan:
             batch_idxs = idxs_perm[i : i + batch_size]
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
-            sweeps, updates = self.train_step(
+            sweeps, fraction_updates = self.train_step(
                 x, y, max_steps, lr, threshold, weight_decay
             )
             sweeps_list.append(sweeps)
-            updates_list.append(updates)
+            updates_list.append(fraction_updates)
         return sweeps_list, updates_list
 
     @torch.inference_mode()
@@ -432,9 +455,9 @@ class BatchMeIfYouCan:
         inputs: torch.Tensor,
         targets: torch.Tensor,
         max_steps: int,
-        lr: float,
-        threshold: float,
-        weight_decay: float,
+        lr: torch.Tensor,
+        threshold: torch.Tensor,
+        weight_decay: torch.Tensor,
         batch_size: int,
         eval_interval: Optional[int] = None,
         eval_inputs: Optional[torch.Tensor] = None,
@@ -455,23 +478,26 @@ class BatchMeIfYouCan:
         :param eval_targets: validation targets.
         :return: tuple (train accuracy history, eval accuracy history)
         """
+        assert len(threshold) == self.num_layers + 1
+        assert len(weight_decay) == self.num_layers + 2
+        assert len(lr) == self.num_layers + 2
         if eval_interval is None:
             eval_interval = num_epochs + 1  # never evaluate
         train_acc_history = []
         eval_acc_history = []
         representations = defaultdict(list)  # input, time, layer
         for epoch in range(num_epochs):
-            sweeps, updates = self.train_epoch(
+            sweeps, fraction_updates = self.train_epoch(
                 inputs, targets, max_steps, lr, threshold, weight_decay, batch_size
             )
             train_metrics = self.evaluate(inputs, targets, max_steps)
             avg_sweeps = torch.tensor(sweeps).float().mean().item()
-            avg_updates = torch.tensor(updates).float().mean().item()
+            avg_updates = torch.tensor(fraction_updates).float().mean().item()
             logging.info(
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
                 f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
                 f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Avg fraction of updates per sweep: {avg_updates / ((self.num_layers * self.N + self.C) * batch_size):.3f}"
+                f"Avg fraction of updates per sweep: {avg_updates:.3f}"
             )
             train_acc_history.append(train_metrics["overall_accuracy"])
             if (

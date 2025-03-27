@@ -10,7 +10,7 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
-from src.batch_me_if_you_can import BatchMeIfYouCan  # noqa
+from src.classifier import BatchMeIfYouCan  # noqa
 from src.data import get_balanced_dataset
 from src.utils import (
     plot_accuracy_by_class_barplot,
@@ -45,7 +45,7 @@ def main(cfg):
     eval_inputs, eval_targets, eval_metadata, eval_class_prototypes = (
         get_balanced_dataset(
             cfg.N,
-            cfg.data.P,
+            min(cfg.data.P, 10),
             cfg.data.C,
             cfg.data.p,
             test_data_dir,
@@ -68,14 +68,11 @@ def main(cfg):
         "C": cfg.data.C,
         "lambda_left": cfg.lambda_left,
         "lambda_right": cfg.lambda_right,
-        "lambda_x": cfg.lambda_x,
-        "lambda_y": cfg.lambda_y,
         "J_D": cfg.J_D,
-        "device": cfg.device,  # e.g., "cpu" or "cuda"
+        "device": cfg.device,
         "seed": cfg.seed,
     }
-    model_cls = BatchMeIfYouCan
-    model = model_cls(**model_kwargs)
+    model = BatchMeIfYouCan(**model_kwargs)
 
     # ================== Initial Plots ==================
     init_plots_dir = os.path.join(output_dir, "init")
@@ -102,9 +99,9 @@ def main(cfg):
         train_inputs,
         train_targets,
         cfg.max_steps,
-        cfg.lr,
-        cfg.threshold,
-        cfg.weight_decay,
+        torch.tensor(cfg.lr),
+        torch.tensor(cfg.threshold),
+        torch.tensor(cfg.weight_decay),
         cfg.batch_size,
         eval_interval=cfg.eval_interval,
         eval_inputs=eval_inputs,

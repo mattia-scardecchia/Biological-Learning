@@ -1,5 +1,5 @@
 data:
   C: 10     # number of classes
   P: 30     # patterns per class
-  p: 0.4    # flip rate for each component of each class prototype (iid)
+  p: 0.35    # flip rate for each component of each class prototype (iid)
   save_dir: 'data'
