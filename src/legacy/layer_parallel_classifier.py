@@ -1,3 +1,8 @@
+"""
+Second, faster version of the classifier. Relaxation is done in parallel for a batch of
+inputs; furthermore, all spins in a single layer are updated at once.
+"""
+
 import logging
 import math
 from collections import defaultdict

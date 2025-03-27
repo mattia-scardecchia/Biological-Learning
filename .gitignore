@@ -9,4 +9,4 @@ slurm_logs/
 checkpoints/
 logs/
 
-profile.stats
+*.stats

@@ -1,8 +1,13 @@
+"""
+Builds on top of the sequential implementation of the classifier.
+Supports sparse internal couplings.
+"""
+
 from typing import Optional
 
 import numpy as np
 
-from src.classifier.classifier import Classifier, initialize_readout_weights
+from src.legacy.sequential_classifier import Classifier, initialize_readout_weights
 from src.utils import DTYPE, sign, theta
 
 

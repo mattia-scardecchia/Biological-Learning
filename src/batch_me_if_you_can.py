@@ -203,7 +203,7 @@ class BatchMeIfYouCan:
             if y is None:
                 # return torch.zeros_like(readout)
                 return 0
-            return (2 * y.clone() - 1) * self.lambda_y
+            return (2 * y - 1) * self.lambda_y
         elif layer_idx == self.num_layers - 1:
             return torch.matmul(readout, self.W_back)
         else:
@@ -315,12 +315,15 @@ class BatchMeIfYouCan:
         y: torch.Tensor,
         lr: float,
         threshold: float,
+        weight_decay: float,
     ):
         hidden_field, _ = self.local_field(states, readout, x, y, True)
         is_unstable = ((hidden_field * states) <= threshold).float()
         delta_J = lr * torch.matmul((is_unstable * states).transpose(1, 2), states)
         delta_J[self.diagonal_mask] = 0
-        self.couplings += delta_J / math.sqrt(x.shape[0])
+        self.couplings = self.couplings * (1 - lr * weight_decay) + delta_J / math.sqrt(
+            x.shape[0]
+        )
         num_updates = is_unstable.sum().item()
         logging.debug(f"Number of perceptron rule updates: {num_updates}")
         return num_updates
@@ -344,10 +347,13 @@ class BatchMeIfYouCan:
         max_steps: int,
         lr: float,
         threshold: float,
+        weight_decay: float,
     ):
         states, readout = self.initialize_neurons_state(x.shape[0], x)
         states, readout, num_sweeps = self.relax(states, readout, x, y, max_steps)
-        num_updates = self.perceptron_rule_update(states, readout, x, y, lr, threshold)
+        num_updates = self.perceptron_rule_update(
+            states, readout, x, y, lr, threshold, weight_decay
+        )
         return num_sweeps, num_updates
 
     def inference(self, x: torch.Tensor, max_steps: int):
@@ -391,6 +397,7 @@ class BatchMeIfYouCan:
         max_steps: int,
         lr: float,
         threshold: float,
+        weight_decay: float,
         batch_size: int,
     ):
         """
@@ -411,7 +418,9 @@ class BatchMeIfYouCan:
             batch_idxs = idxs_perm[i : i + batch_size]
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
-            sweeps, updates = self.train_step(x, y, max_steps, lr, threshold)
+            sweeps, updates = self.train_step(
+                x, y, max_steps, lr, threshold, weight_decay
+            )
             sweeps_list.append(sweeps)
             updates_list.append(updates)
         return sweeps_list, updates_list
@@ -425,6 +434,7 @@ class BatchMeIfYouCan:
         max_steps: int,
         lr: float,
         threshold: float,
+        weight_decay: float,
         batch_size: int,
         eval_interval: Optional[int] = None,
         eval_inputs: Optional[torch.Tensor] = None,
@@ -452,7 +462,7 @@ class BatchMeIfYouCan:
         representations = defaultdict(list)  # input, time, layer
         for epoch in range(num_epochs):
             sweeps, updates = self.train_epoch(
-                inputs, targets, max_steps, lr, threshold, batch_size
+                inputs, targets, max_steps, lr, threshold, weight_decay, batch_size
             )
             train_metrics = self.evaluate(inputs, targets, max_steps)
             avg_sweeps = torch.tensor(sweeps).float().mean().item()

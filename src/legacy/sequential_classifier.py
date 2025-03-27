@@ -1,3 +1,7 @@
+"""
+First implementation. Flips one spin at a time.
+"""
+
 import logging
 import math
 from collections import defaultdict
