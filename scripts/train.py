@@ -11,8 +11,9 @@ from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
 from src.classifier import BatchMeIfYouCan  # noqa
-from src.data import get_balanced_dataset
+from src.data import prepare_mnist
 from src.utils import (
+    load_synthetic_dataset,
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_representation_similarity_among_inputs,
@@ -23,49 +24,52 @@ from src.utils import (
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
-    train_data_dir = os.path.join(cfg.data.save_dir, "train")
-    test_data_dir = os.path.join(cfg.data.save_dir, "test")
     rng = np.random.default_rng(cfg.seed)
 
     # ================== Data ==================
-    train_inputs, train_targets, train_metadata, train_class_prototypes = (
-        get_balanced_dataset(
-            cfg.N,
-            cfg.data.P,
-            cfg.data.C,
-            cfg.data.p,
-            train_data_dir,
-            None,
-            rng,
-            shuffle=True,
-            load_if_available=True,
-            dump=True,
-        )
-    )
-    eval_inputs, eval_targets, eval_metadata, eval_class_prototypes = (
-        get_balanced_dataset(
-            cfg.N,
-            min(cfg.data.P, 10),
-            cfg.data.C,
-            cfg.data.p,
-            test_data_dir,
+    if cfg.data.dataset == "synthetic":
+        train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
+        test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
+        (
+            train_inputs,
+            train_targets,
+            eval_inputs,
+            eval_targets,
+            train_metadata,
             train_class_prototypes,
+            eval_metadata,
+            eval_class_prototypes,
+        ) = load_synthetic_dataset(
+            cfg.N,
+            cfg.data.synthetic.P,
+            cfg.data.synthetic.C,
+            cfg.data.synthetic.p,
+            cfg.data.synthetic.eval_samples_per_class,
             rng,
-            shuffle=False,
-            load_if_available=True,
-            dump=True,
+            train_data_dir,
+            test_data_dir,
+            cfg.device,
         )
-    )
-    train_inputs = torch.tensor(train_inputs, dtype=torch.float32).to(cfg.device)
-    train_targets = torch.tensor(train_targets, dtype=torch.float32).to(cfg.device)
-    eval_inputs = torch.tensor(eval_inputs, dtype=torch.float32).to(cfg.device)
-    eval_targets = torch.tensor(eval_targets, dtype=torch.float32).to(cfg.device)
+        C = cfg.data.synthetic.C
+    elif cfg.data.dataset == "mnist":
+        train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
+            prepare_mnist(
+                cfg.data.mnist.num_samples_train,
+                cfg.data.mnist.num_samples_eval,
+                cfg.N,
+                cfg.data.mnist.binarize,
+                cfg.seed,
+            )
+        )
+        C = 10
+    else:
+        raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
 
     # ================== Model Initialization ==================
     model_kwargs = {
         "num_layers": cfg.num_layers,
         "N": cfg.N,
-        "C": cfg.data.C,
+        "C": C,
         "lambda_left": cfg.lambda_left,
         "lambda_right": cfg.lambda_right,
         "J_D": cfg.J_D,

@@ -2,6 +2,8 @@ numpy
 matplotlib
 seaborn
 pandas
+torch
+torchvision
 
 tqdm
 hydra-core

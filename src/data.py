@@ -3,6 +3,8 @@ import os
 from typing import Optional
 
 import numpy as np
+import torch
+from torchvision import datasets, transforms
 
 
 def load_balanced_dataset(save_dir: str):
@@ -108,3 +110,50 @@ def get_balanced_dataset(
     if dump:
         dump_balanced_dataset(inputs, targets, metadata, save_dir, class_prototypes)
     return inputs, targets, metadata, class_prototypes
+
+
+def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed):
+    # load MNIST dataset
+    torch.manual_seed(seed)
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: x.view(-1)),
+        ]
+    )
+    train_dataset = datasets.MNIST(
+        root="./data", train=True, download=True, transform=transform
+    )
+    eval_dataset = datasets.MNIST(
+        root="./data", train=False, download=True, transform=transform
+    )
+
+    # Downsample the datasets
+    train_perm = torch.randperm(len(train_dataset))
+    train_indices = train_perm[:num_samples_train]
+    train_images = torch.stack([train_dataset[i][0] for i in train_indices])
+    train_labels = torch.tensor([train_dataset[i][1] for i in train_indices])
+    eval_perm = torch.randperm(len(eval_dataset))
+    eval_indices = eval_perm[:num_samples_eval]
+    eval_images = [eval_dataset[i][0] for i in eval_indices]
+    eval_labels = [eval_dataset[i][1] for i in eval_indices]
+
+    # Sort eval samples by class
+    eval_labels_tensor = torch.tensor(eval_labels)
+    sort_idx = torch.argsort(eval_labels_tensor)
+    eval_images = torch.stack(eval_images)[sort_idx]
+    eval_labels = eval_labels_tensor[sort_idx]
+
+    # Convert labels to one-hot encoding
+    train_labels = torch.eye(10)[train_labels]
+    eval_labels = torch.eye(10)[eval_labels]
+
+    # Random linear projection and binarization
+    projection_matrix = torch.randn(784, N)
+    train_images = train_images @ projection_matrix
+    eval_images = eval_images @ projection_matrix
+    if binarize:
+        train_images = torch.sign(train_images)
+        eval_images = torch.sign(eval_images)
+
+    return train_images, train_labels, eval_images, eval_labels, projection_matrix

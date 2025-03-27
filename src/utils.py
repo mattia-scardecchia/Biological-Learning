@@ -5,6 +5,8 @@ import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 
+from src.data import get_balanced_dataset
+
 DTYPE = np.float32
 
 
@@ -235,3 +237,59 @@ def plot_time_series(tensor):
 
     plt.tight_layout()
     plt.show()
+
+
+def load_synthetic_dataset(
+    N,
+    P,
+    C,
+    p,
+    eval_samples_per_class,
+    rng,
+    train_data_dir,
+    test_data_dir,
+    device,
+):
+    train_inputs, train_targets, train_metadata, train_class_prototypes = (
+        get_balanced_dataset(
+            N,
+            P,
+            C,
+            p,
+            train_data_dir,
+            None,
+            rng,
+            shuffle=True,
+            load_if_available=True,
+            dump=True,
+        )
+    )
+    eval_inputs, eval_targets, eval_metadata, eval_class_prototypes = (
+        get_balanced_dataset(
+            N,
+            eval_samples_per_class,
+            C,
+            p,
+            test_data_dir,
+            train_class_prototypes,
+            rng,
+            shuffle=False,
+            load_if_available=True,
+            dump=True,
+        )
+    )
+    train_inputs = torch.tensor(train_inputs, dtype=torch.float32).to(device)
+    train_targets = torch.tensor(train_targets, dtype=torch.float32).to(device)
+    eval_inputs = torch.tensor(eval_inputs, dtype=torch.float32).to(device)
+    eval_targets = torch.tensor(eval_targets, dtype=torch.float32).to(device)
+
+    return (
+        train_inputs,
+        train_targets,
+        eval_inputs,
+        eval_targets,
+        train_metadata,
+        train_class_prototypes,
+        eval_metadata,
+        eval_class_prototypes,
+    )
