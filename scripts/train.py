@@ -59,6 +59,7 @@ def main(cfg):
                 cfg.N,
                 cfg.data.mnist.binarize,
                 cfg.seed,
+                shuffle=True,
             )
         )
         C = 10

@@ -112,7 +112,7 @@ def get_balanced_dataset(
     return inputs, targets, metadata, class_prototypes
 
 
-def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed):
+def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True):
     # load MNIST dataset
     torch.manual_seed(seed)
     transform = transforms.Compose(
@@ -129,11 +129,19 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed):
     )
 
     # Downsample the datasets
-    train_perm = torch.randperm(len(train_dataset))
+    train_perm = (
+        torch.randperm(len(train_dataset))
+        if shuffle
+        else torch.arange(len(train_dataset))
+    )
     train_indices = train_perm[:num_samples_train]
     train_images = torch.stack([train_dataset[i][0] for i in train_indices])
     train_labels = torch.tensor([train_dataset[i][1] for i in train_indices])
-    eval_perm = torch.randperm(len(eval_dataset))
+    eval_perm = (
+        torch.randperm(len(eval_dataset))
+        if shuffle
+        else torch.arange(len(eval_dataset))
+    )
     eval_indices = eval_perm[:num_samples_eval]
     eval_images = [eval_dataset[i][0] for i in eval_indices]
     eval_labels = [eval_dataset[i][1] for i in eval_indices]
@@ -155,5 +163,12 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed):
     if binarize:
         train_images = torch.sign(train_images)
         eval_images = torch.sign(eval_images)
+    else:
+        train_images = (train_images - train_images.min()) / (
+            train_images.max() - train_images.min()
+        )
+        eval_images = (eval_images - eval_images.min()) / (
+            eval_images.max() - eval_images.min()
+        )
 
     return train_images, train_labels, eval_images, eval_labels, projection_matrix
