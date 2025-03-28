@@ -10,7 +10,7 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
-from src.classifier import BatchMeIfYouCan  # noqa
+from src.classifier import BatchMeIfYouCan
 from src.data import prepare_mnist
 from src.utils import (
     load_synthetic_dataset,
