@@ -95,6 +95,19 @@ class BatchMeIfYouCan:
             f"Parameters: N={N}, C={C}, num_layers={num_layers}, J_D={J_D}, lambda_left={lambda_left}, lambda_right={lambda_right}"
         )
 
+        # self.fixed_noise = torch.stack(
+        #     [
+        #         initialize_layer(1, self.N, self.device, self.generator)
+        #         for _ in range(self.num_layers)
+        #     ]
+        # )  # num_layers, 1, N
+
+        # self.fixed_noise = (
+        #     initialize_layer(1, self.N, self.device, self.generator)
+        #     .unsqueeze(0)
+        #     .expand(self.num_layers, -1, -1)
+        # )  # num_layers, 1, N
+
     def initialize_couplings(self):
         """
         Initializes the internal couplings within each layer."
@@ -123,6 +136,11 @@ class BatchMeIfYouCan:
         )
         return weights * 2 - 1
 
+        # weights = torch.randn(
+        #     self.C, self.N, device=self.device, generator=self.generator
+        # )
+        # return weights
+
     def initialize_neurons_state(
         self, batch_size: int, x: Optional[torch.Tensor] = None
     ):
@@ -139,6 +157,24 @@ class BatchMeIfYouCan:
             ]
         readout = initialize_layer(batch_size, self.C, self.device, self.generator)
         return torch.stack(states), readout
+
+        # assert x is not None
+        # # states = torch.stack([x.sign().clone() for _ in range(self.num_layers)])
+        # # mask = torch.rand_like(states) < 0.05
+        # # states[mask] = self.fixed_noise.expand(-1, batch_size, -1)[mask]
+        # states = self.fixed_noise.expand(-1, batch_size, -1).clone()
+        # readout = initialize_layer(batch_size, self.C, self.device, self.generator)
+        # return states, readout
+
+        # assert x is not None
+        # probas = torch.linspace(0, 0.5, self.num_layers)
+        # residual = torch.stack([self.sign(x).clone() for _ in range(self.num_layers)])
+        # mask = torch.rand_like(residual) < probas[:, None, None]
+        # states = torch.where(
+        #     mask, self.fixed_noise.expand(-1, batch_size, -1), residual
+        # )
+        # readout = initialize_layer(batch_size, self.C, self.device, self.generator)
+        # return states, readout
 
     def sign(self, input: torch.Tensor):
         """
