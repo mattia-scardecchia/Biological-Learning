@@ -1,16 +1,14 @@
 TODO:
-- raffina nuova implementazione:
-    - controlla che faccia quello che pensi
-    - attiva learning W e weight decay
-    - velocizzala
-    - estendila a stati 0/1
+
+- tuna i parametri per mnist!
 
 
+(-) make config comfy
+(-) estendi a stati 0/1 o continui
+(-) ottimizza ancora performance
+    - torch.compile?
+    - parallelizza W
 
-Cambiamenti:
-- parallelizza! torch?
-- impara W --> fallo asimmetrico?
-- weight decay
 
 poi:
 - sparse couplings
@@ -21,11 +19,3 @@ poi:
 - robustezza? a livello del perceptron rule update
 - dinamica con message passing?
 - coupling binari? confronta con 'regola che trova roba robusta'
-
-
-TODO:
-- improve logging:
-    - track the distribution of couplings (preferrably the whole histogram + asymmetricity, maybe once per epoch)
-
-- matrici J sparse (normalizza bene)
-- stati 0-1 (e sparsità)

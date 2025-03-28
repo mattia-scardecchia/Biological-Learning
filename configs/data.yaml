@@ -1,12 +1,10 @@
 data:
   dataset: 'mnist'  # 'synthetic' or 'mnist'
+  P: 100             # train patterns per class
+  P_eval: 10        # eval patterns per class
   synthetic:
     C: 10              # number of classes
-    P: 30              # train patterns per class
     p: 0.35            # flip rate for each component of each class prototype (iid)
-    eval_samples_per_class: 10
     save_dir: 'data'
   mnist:
-    num_samples_train: 1000
-    num_samples_eval: 100
     binarize: true

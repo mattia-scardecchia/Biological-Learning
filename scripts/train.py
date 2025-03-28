@@ -41,10 +41,10 @@ def main(cfg):
             eval_class_prototypes,
         ) = load_synthetic_dataset(
             cfg.N,
-            cfg.data.synthetic.P,
+            cfg.data.P,
             cfg.data.synthetic.C,
             cfg.data.synthetic.p,
-            cfg.data.synthetic.eval_samples_per_class,
+            cfg.data.P_eval,
             rng,
             train_data_dir,
             test_data_dir,
@@ -54,8 +54,8 @@ def main(cfg):
     elif cfg.data.dataset == "mnist":
         train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
             prepare_mnist(
-                cfg.data.mnist.num_samples_train,
-                cfg.data.mnist.num_samples_eval,
+                cfg.data.P * 10,
+                cfg.data.P_eval * 10,
                 cfg.N,
                 cfg.data.mnist.binarize,
                 cfg.seed,
