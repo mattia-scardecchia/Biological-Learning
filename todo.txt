@@ -1,6 +1,15 @@
-TODO:
+CIFAR:
+- decidi come gestire dimensionalità e binarizzazione
+- testa
 
-- tuna i parametri per mnist!
+TODO:
+- plotta rappresentazioni per training patterns in automatico
+- inizializzazione stati:
+    - random: lambda_left grande
+    - mischia ogni layer con un pattern fisso diverso?
+- threshold:
+    - annealing?
+    - top k%?
 
 
 (-) make config comfy
