@@ -7,10 +7,12 @@ import numpy as np
 import pandas as pd
 
 # -------------------- Configuration --------------------
-BASE_DIR = "data/grid-search-18-03/sparsity 1.0"
-THRESHOLD_VALUE = 0.5
+BASE_DIR = "data/grid-search-28-03"
+THRESHOLD_VALUE = 0.7
 ACCURACY_TYPE = "max_eval_acc"
 HIST_BINS = 10
+
+EXCLUDED_COLUMNS = []
 
 
 # -------------------- Helper Functions --------------------
@@ -40,12 +42,10 @@ def load_data(base_dir: str):
     ]
     # Determine index columns as those not containing 'acc' and not in these lambda columns
     index_columns = [
-        c
-        for c in dfs[0].columns
-        if "acc" not in c and c not in ["lambda_right", "lambda_y"]
+        c for c in dfs[0].columns if "acc" not in c and c not in EXCLUDED_COLUMNS
     ]
     df = pd.concat(dfs, axis=0).set_index(index_columns)
-    df = df.drop(columns=["lambda_right", "lambda_y"])
+    df = df.drop(columns=EXCLUDED_COLUMNS)
     return df, index_columns
 
 
