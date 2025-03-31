@@ -364,38 +364,39 @@ class BatchMeIfYouCan:
         weight_decay: torch.Tensor,
     ):
         # update J
+        scale = 1 / math.sqrt(self.N) / math.sqrt(x.shape[0])
         hidden_field, readout_field = self.local_field(states, readout, x, y, True)
         is_unstable = ((hidden_field * states) <= threshold[:-1, None, None]).float()
         delta_J = (
             lr[:-2, None, None]
             * torch.matmul((is_unstable * states).transpose(1, 2), states)
-            / math.sqrt(self.N)
-            / math.sqrt(x.shape[0])
+            * scale
         )
         self.couplings = (
-            self.couplings * (1 - weight_decay[:-2, None, None] * lr[:-2, None, None])
+            self.couplings
+            * (1 - weight_decay[:-2, None, None] * lr[:-2, None, None] * scale)
             + delta_J
         )
         self.couplings[self.diagonal_mask] = self.J_D
         fraction_updates = is_unstable.mean().item()
 
-        # update W_back
-        delta_W_back = (
-            (lr[-2] * torch.matmul((is_unstable[-1] * states[-1]).T, readout).T)
-            / math.sqrt(self.C)
-            / math.sqrt(x.shape[0])
-        )
-        self.W_back = self.W_back * (1 - weight_decay[-2] * lr[-2]) + delta_W_back
-
         # update W_forth
         is_unstable_readout = (readout_field * readout <= threshold[-1]).float()
         delta_W_forth = (
-            lr[-1]
-            * torch.matmul((is_unstable_readout * readout).T, states[-1])
-            / math.sqrt(self.N)
-            / math.sqrt(x.shape[0])
+            lr[-1] * torch.matmul((is_unstable_readout * readout).T, states[-1]) * scale
         )
-        self.W_forth = self.W_forth * (1 - weight_decay[-1] * lr[-1]) + delta_W_forth
+        self.W_forth = (
+            self.W_forth * (1 - weight_decay[-1] * lr[-1] * scale) + delta_W_forth
+        )
+
+        # update W_back
+        scale = 1 / math.sqrt(self.C) / math.sqrt(x.shape[0])
+        delta_W_back = (
+            lr[-2] * torch.matmul((is_unstable[-1] * states[-1]).T, readout).T
+        ) * scale
+        self.W_back = (
+            self.W_back * (1 - weight_decay[-2] * lr[-2] * scale) + delta_W_back
+        )
 
         return fraction_updates
 

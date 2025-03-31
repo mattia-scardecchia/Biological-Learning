@@ -1,5 +1,5 @@
 data:
-  dataset: 'mnist'  # 'synthetic' or 'mnist'
+  dataset: 'mnist'  # 'synthetic', 'mnist' or 'cifar'
   P: 100             # train patterns per class
   P_eval: 30        # eval patterns per class
   synthetic:
@@ -8,3 +8,6 @@ data:
     save_dir: 'data'
   mnist:
     binarize: true
+  cifar:
+    binarize: true
+    cifar10: true  # if false, use cifar100
