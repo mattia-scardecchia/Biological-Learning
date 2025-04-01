@@ -12,16 +12,21 @@ from src.classifier import BatchMeIfYouCan
 from src.data import prepare_mnist
 from src.utils import load_synthetic_dataset
 
+# HYPERPARAM_GRID = {
+#     "lr_J": [0.05, 0.075, 0.1],
+#     "lr_W": [0.01, 0.02, 0.03],
+#     "threshold": [1.25, 1.5, 1.75],
+#     "weight_decay_J": [0.0, 0.001, 0.01],
+#     "lambda_left": [1.75, 2.0, 2.25],
+#     "lambda_x": [4.0, 5.0],
+#     "J_D": [0.2, 0.3, 0.4],
+#     "num_epochs": [10],
+#     "weight_decay_W": [0.0],
+# }
 HYPERPARAM_GRID = {
-    "lr_J": [0.05, 0.075, 0.1],
-    "lr_W": [0.01, 0.02, 0.03],
-    "threshold": [1.25, 1.5, 1.75],
-    "weight_decay_J": [0.0, 0.001, 0.01],
-    "lambda_left": [1.75, 2.0, 2.25],
-    "lambda_x": [4.0, 5.0],
-    "J_D": [0.2, 0.3, 0.4],
-    "num_epochs": [10],
-    "weight_decay_W": [0.0],
+    "lr_J": [0.1, 0.05],
+    "lr_W": [0.01, 0.005],
+    "threshold": [2.5, 3.0, 3.5],
 }
 
 
@@ -80,20 +85,23 @@ def main(cfg):
         i += 1
         logging.info(f"Starting iteration {i}")
         hyperparams = dict(zip(HYPERPARAM_GRID.keys(), values))
-        lambda_left = (
-            [hyperparams["lambda_x"]]
-            + [hyperparams["lambda_left"]] * (cfg.num_layers - 1)
-            + [1.0]
-        )
-        lambda_right = (
-            [hyperparams["lambda_left"]] * (cfg.num_layers - 1)
-            + [1.0]
-            + [hyperparams["lambda_x"]]
-        )
+        # lambda_left = (
+        #     [hyperparams["lambda_x"]]
+        #     + [hyperparams["lambda_left"]] * (cfg.num_layers - 1)
+        #     + [1.0]
+        # )
+        # lambda_right = (
+        #     [hyperparams["lambda_left"]] * (cfg.num_layers - 1)
+        #     + [1.0]
+        #     + [hyperparams["lambda_x"]]
+        # )
+        # weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
+        #     hyperparams["weight_decay_W"]
+        # ] * 2
+        lambda_left = cfg.lambda_left
+        lambda_right = cfg.lambda_right
+        weight_decay = cfg.weight_decay
         lr = [hyperparams["lr_J"]] * cfg.num_layers + [hyperparams["lr_W"]] * 2
-        weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
-            hyperparams["weight_decay_W"]
-        ] * 2
         threshold = [hyperparams["threshold"]] * (cfg.num_layers + 1)
 
         # ================== Model Training ==================
@@ -104,13 +112,13 @@ def main(cfg):
             "C": C,
             "lambda_left": lambda_left,
             "lambda_right": lambda_right,
-            "J_D": hyperparams["J_D"],
+            "J_D": cfg.J_D,
             "device": cfg.device,
             "seed": cfg.seed,
         }
         model = BatchMeIfYouCan(**model_kwargs)
         train_acc_history, eval_acc_history, eval_representations = model.train_loop(
-            hyperparams["num_epochs"],
+            cfg.num_epochs,
             train_inputs,
             train_targets,
             cfg.max_steps,

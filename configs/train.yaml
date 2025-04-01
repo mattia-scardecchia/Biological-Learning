@@ -5,7 +5,7 @@ defaults:
 
 # Experiment
 name: 'prova'
-seed: 12
+seed: 123
 device: 'cpu'
 
 # Network and Relaxation
@@ -17,7 +17,7 @@ lambda_left: [0, 2.0, 2.0, 2.0, 2.0, 1.0]   # first is lambda_x, last affects th
 lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 4.0]  # last is lambda_y, last but one affects the readout layer
 
 # Perceptron Rule
-num_epochs: 20
+num_epochs: 40
 batch_size: 16
 lr: [0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 0.01]           # scaled by typical weight size. last two are for W_back and W_forth
 threshold: [2.5, 2.5, 2.5, 2.5, 2.5, 2.5]                     # perceptron rule. last is for readout layer
@@ -25,4 +25,4 @@ weight_decay: [0.001, 0.001, 0.001, 0.001, 0.001, 0.0, 0.0]   # scaled by learni
 
 # Evaluation
 eval_interval: 1        # epochs
-skip_final_eval: false
+skip_final_eval: true
