@@ -6,7 +6,7 @@
 
 #SBATCH --time=23:00:00
 #SBATCH --partition=compute
-#SBATCH --nodelist=cnode06
+#SBATCH --nodelist=cnode05
 #SBATCH --qos=normal
 
 #SBATCH --ntasks=1
@@ -16,10 +16,8 @@
 
 mkdir -p slurm_logs/output slurm_logs/error
 module load miniconda3
+SEED=${seed:-11}
+echo "Running run.sh with seed=$SEED"
 
-Train
-conda run -p /home/3144860/.conda/envs/bio python scripts/train.py name=mnist data.P=1000 data.P_eval=20
-conda run -p /home/3144860/.conda/envs/bio python scripts/train.py name=mnist data.P=6000 data.P_eval=20
-
-# MLP
-# conda run -p /home/3144860/.conda/envs/bio python scripts/train_mlp.py seed=$SEED
+# Grid search
+conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py name=grid seed=$SEED

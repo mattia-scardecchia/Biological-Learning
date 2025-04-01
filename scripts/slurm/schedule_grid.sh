@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: bash submit_grid_search.sh --seeds 1,2,3,4,5
+# Usage: bash grid.sh --seeds 1,2,3,4,5
 
 # Parse command-line argument for seeds
 while [[ "$#" -gt 0 ]]; do
@@ -29,5 +29,5 @@ for i in "${!seeds_array[@]}"; do
     
     echo "Sleeping, then submitting job with seed=${seed} on node=${cnode}"
     sleep 30
-    sbatch --export=ALL,seed=$seed --nodelist=$cnode scripts/slurm/run.sh
+    sbatch --export=ALL,seed=$seed --nodelist=$cnode scripts/slurm/run_grid.sh
 done
