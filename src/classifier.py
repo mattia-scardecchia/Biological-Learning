@@ -373,7 +373,13 @@ class BatchMeIfYouCan:
             / math.sqrt(x.shape[0])
         )
         self.couplings = (
-            self.couplings * (1 - weight_decay[:-2, None, None] * lr[:-2, None, None])
+            self.couplings
+            * (
+                1
+                - weight_decay[:-2, None, None]
+                * lr[:-2, None, None]
+                / math.sqrt(self.N)
+            )
             + delta_J
         )
         self.couplings[self.diagonal_mask] = self.J_D
@@ -385,7 +391,10 @@ class BatchMeIfYouCan:
             / math.sqrt(self.C)
             / math.sqrt(x.shape[0])
         )
-        self.W_back = self.W_back * (1 - weight_decay[-2] * lr[-2]) + delta_W_back
+        self.W_back = (
+            self.W_back * (1 - weight_decay[-2] * lr[-2] / math.sqrt(self.C))
+            + delta_W_back
+        )
 
         # update W_forth
         is_unstable_readout = (readout_field * readout <= threshold[-1]).float()
@@ -395,7 +404,10 @@ class BatchMeIfYouCan:
             / math.sqrt(self.N)
             / math.sqrt(x.shape[0])
         )
-        self.W_forth = self.W_forth * (1 - weight_decay[-1] * lr[-1]) + delta_W_forth
+        self.W_forth = (
+            self.W_forth * (1 - weight_decay[-1] * lr[-1] / math.sqrt(self.N))
+            + delta_W_forth
+        )
 
         return fraction_updates
 
