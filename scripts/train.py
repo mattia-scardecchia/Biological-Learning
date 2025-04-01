@@ -11,7 +11,7 @@ from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
 from src.classifier import BatchMeIfYouCan
-from src.data import prepare_mnist
+from src.data import prepare_cifar, prepare_mnist
 from src.utils import (
     load_synthetic_dataset,
     plot_accuracy_by_class_barplot,
@@ -30,6 +30,7 @@ def main(cfg):
     if cfg.data.dataset == "synthetic":
         train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
         test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
+        C = cfg.data.synthetic.C
         (
             train_inputs,
             train_targets,
@@ -42,7 +43,7 @@ def main(cfg):
         ) = load_synthetic_dataset(
             cfg.N,
             cfg.data.P,
-            cfg.data.synthetic.C,
+            C,
             cfg.data.synthetic.p,
             cfg.data.P_eval,
             rng,
@@ -50,19 +51,29 @@ def main(cfg):
             test_data_dir,
             cfg.device,
         )
-        C = cfg.data.synthetic.C
     elif cfg.data.dataset == "mnist":
+        C = 10
         train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
             prepare_mnist(
-                cfg.data.P * 10,
-                cfg.data.P_eval * 10,
+                cfg.data.P * C,
+                cfg.data.P_eval * C,
                 cfg.N,
                 cfg.data.mnist.binarize,
                 cfg.seed,
                 shuffle=True,
             )
         )
-        C = 10
+    elif cfg.data.dataset == "cifar":
+        C = 10 if cfg.data.cifar.cifar10 else 100
+        train_inputs, train_targets, eval_inputs, eval_targets, median = prepare_cifar(
+            cfg.data.P * C,
+            cfg.data.P_eval * C,
+            cfg.N,
+            cfg.data.cifar.binarize,
+            cfg.seed,
+            cifar10=cfg.data.cifar.cifar10,
+            shuffle=True,
+        )
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
 

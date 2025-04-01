@@ -172,3 +172,80 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffl
         )
 
     return train_images, train_labels, eval_images, eval_labels, projection_matrix
+
+
+def prepare_cifar(
+    num_samples_train, num_samples_eval, N, binarize, seed, cifar10=True, shuffle=True
+):
+    torch.manual_seed(seed)
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Grayscale(num_output_channels=1),
+            transforms.Lambda(lambda x: x.view(-1)),
+        ]
+    )
+
+    # Load CIFAR dataset
+    if cifar10:
+        dataset_cls = datasets.CIFAR10
+        num_classes = 10
+    else:
+        dataset_cls = datasets.CIFAR100
+        num_classes = 100
+    train_dataset = dataset_cls(
+        root="./data", train=True, download=True, transform=transform
+    )
+    eval_dataset = dataset_cls(
+        root="./data", train=False, download=True, transform=transform
+    )
+
+    # Downsample datasets
+    train_perm = (
+        torch.randperm(len(train_dataset))
+        if shuffle
+        else torch.arange(len(train_dataset))
+    )
+    train_indices = train_perm[:num_samples_train]
+    train_images = torch.stack([train_dataset[i][0] for i in train_indices])
+    train_labels = torch.tensor([train_dataset[i][1] for i in train_indices])
+    eval_perm = (
+        torch.randperm(len(eval_dataset))
+        if shuffle
+        else torch.arange(len(eval_dataset))
+    )
+    eval_indices = eval_perm[:num_samples_eval]
+    eval_images = [eval_dataset[i][0] for i in eval_indices]
+    eval_labels = [eval_dataset[i][1] for i in eval_indices]
+
+    # Sort evaluation samples by class for better evaluation insights
+    eval_labels_tensor = torch.tensor(eval_labels)
+    sort_idx = torch.argsort(eval_labels_tensor)
+    eval_images = torch.stack(eval_images)[sort_idx]
+    eval_labels = eval_labels_tensor[sort_idx]
+
+    # Convert labels to one-hot encoding
+    train_labels = torch.eye(num_classes)[train_labels]
+    eval_labels = torch.eye(num_classes)[eval_labels]
+
+    # Binarize or normalize the data
+    if binarize:
+        median = train_images.median().item()
+        train_images = torch.sign(train_images - median)
+        eval_images = torch.sign(eval_images - median)
+    else:
+        train_images = (train_images - train_images.min()) / (
+            train_images.max() - train_images.min()
+        )
+        eval_images = (eval_images - eval_images.min()) / (
+            eval_images.max() - eval_images.min()
+        )
+        median = None
+
+    return (
+        train_images,
+        train_labels,
+        eval_images,
+        eval_labels,
+        median,
+    )
