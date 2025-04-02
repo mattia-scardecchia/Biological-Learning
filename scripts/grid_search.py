@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from hydra.core.hydra_config import HydraConfig
 
-from src.classifier import BatchMeIfYouCan
+from src.classifier import Classifier
 from src.data import prepare_mnist
 from src.utils import load_synthetic_dataset
 
@@ -116,7 +116,7 @@ def main(cfg):
             "device": cfg.device,
             "seed": cfg.seed,
         }
-        model = BatchMeIfYouCan(**model_kwargs)
+        model = Classifier(**model_kwargs)
         train_acc_history, eval_acc_history, eval_representations = model.train_loop(
             cfg.num_epochs,
             train_inputs,

@@ -10,7 +10,7 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
-from src.classifier import BatchMeIfYouCan
+from src.classifier import Classifier
 from src.data import prepare_cifar, prepare_mnist
 from src.utils import (
     load_synthetic_dataset,
@@ -88,7 +88,7 @@ def main(cfg):
         "device": cfg.device,
         "seed": cfg.seed,
     }
-    model = BatchMeIfYouCan(**model_kwargs)
+    model = Classifier(**model_kwargs)
 
     # ================== Initial Plots ==================
     init_plots_dir = os.path.join(output_dir, "init")

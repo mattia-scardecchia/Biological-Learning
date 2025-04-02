@@ -22,29 +22,7 @@ def initialize_layer(
     return state * 2 - 1
 
 
-class BatchMeIfYouCan:
-    """
-    BatchMeIfYouCan
-
-    A dangerously parallel operator for when you’ve got too many dot products
-    and not enough patience. Executes large-scale batch computations with
-    reckless efficiency using all the cores, threads, and dark magic available.
-
-    Features:
-    - Massively parallel batch processing
-    - Matrix multiplications at light speed
-    - Makes your CPU sweat and your RAM cry
-    - Not responsible for any melted laptops
-
-    Usage:
-        Just give it data. It’ll handle the rest. Fast. Loud. Proud.
-
-    Warning:
-        Not for the faint of FLOP. May cause overheating, data loss, or
-        existential dread. Use at your own risk.
-
-    """
-
+class Classifier:
     def __init__(
         self,
         num_layers: int,
