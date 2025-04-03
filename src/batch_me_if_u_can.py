@@ -348,4 +348,4 @@ class BatchMeIfUCan:
         state = self.initialize_state(x.shape[0], x, torch.zeros((x.shape[0], self.C)))
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[-1, : self.C, : self.N] @ final_state[-3]
-        return logits, final_state
+        return logits, final_state[:, 1:-2], final_state[:, -2]
