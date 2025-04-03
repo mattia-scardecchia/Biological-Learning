@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import torch
@@ -66,6 +67,9 @@ class BatchMeIfUCan:
         J_D: float,
         lambda_left: list[float],
         lambda_right: list[float],
+        lr: torch.Tensor,
+        threshold: torch.Tensor,
+        weight_decay: torch.Tensor,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -99,6 +103,10 @@ class BatchMeIfUCan:
             self.cpu_generator.manual_seed(seed)
 
         self.couplings = self.initialize_couplings()  # L+1, N, 3N
+        self.is_learnable = self.build_is_learnable_mask()
+        self.lr = self.build_lr_tensor(lr)
+        self.weight_decay = self.build_weight_decay_tensor(weight_decay)
+        self.threshold = threshold.to(self.device)
 
     def initialize_couplings(self):
         couplings_buffer = []
@@ -191,7 +199,46 @@ class BatchMeIfUCan:
         #     ]
         # )
 
-        return couplings
+        return couplings.to(self.device)
+
+    def build_is_learnable_mask(self):
+        N, L, C = self.N, self.L, self.C
+
+        mask = torch.ones_like(self.couplings)
+        mask[-1, :, N:] = 0
+        mask[-1, C:N, :N] = 0
+        mask[-2, :, 2 * N + C :] = 0
+        mask[0, :, :N] = 0
+
+        for i in range(L):
+            mask[i, :, N : 2 * N].fill_diagonal_(0)
+            if i > 0:
+                mask[i, :, :N].fill_diagonal_(0)
+            if i < L - 1:
+                mask[i, :, 2 * N :].fill_diagonal_(0)
+
+        return mask.to(self.device).to(torch.bool)
+
+    def build_lr_tensor(self, lr):
+        N, L, C = self.N, self.L, self.C
+        lr_tensor = torch.zeros_like(self.couplings)  # (L+1, N, 3N)
+        for idx in range(L):
+            lr_tensor[idx, :, :] = lr[idx] / math.sqrt(N)
+        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] * math.sqrt(N / C)
+        lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)
+        lr[self.is_learnable == 0] = 0
+        assert torch.all((lr_tensor != 0) == self.is_learnable)
+        return lr_tensor.to(self.device)
+
+    def build_weight_decay_tensor(self, weight_decay):
+        N, L, C = self.N, self.L, self.C
+        weight_decay_tensor = torch.zeros_like(self.couplings)
+        for idx in range(L):
+            weight_decay_tensor[idx, :, :] = weight_decay[idx]
+        weight_decay_tensor[L - 1, :, 2 * N : 2 * N + C] = weight_decay[-2]
+        weight_decay_tensor[L, :C, :N] = weight_decay[-1]
+        weight_decay_tensor *= self.lr
+        return weight_decay_tensor.to(self.device)
 
     def initialize_state(self, batch_size: int, x: torch.Tensor, y: torch.Tensor):
         """
@@ -232,5 +279,19 @@ class BatchMeIfUCan:
         )  # Shape: (B, L+1, 3*N)
         return torch.einsum("lni,bli->bln", self.couplings, state_unfolded)
 
-    def perceptron_rule(self):
-        pass
+    def perceptron_rule(
+        self,
+        state: torch.Tensor,
+    ):
+        fields = self.fields(state)  # shape (B, L+1, N)
+        neurons = state[:, 1:-2, :]  # shape (B, L+1, N)
+        S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, N)
+        is_unstable = (fields * neurons) <= self.threshold[None, :, None]
+        delta = (
+            self.lr
+            * torch.einsum("bli,blcj->licj", neurons * is_unstable, S_unfolded).flatten(
+                2
+            )
+            / math.sqrt(state.shape[0])
+        )
+        self.couplings = self.couplings * (1 - self.weight_decay) + delta
