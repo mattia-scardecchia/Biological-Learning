@@ -225,7 +225,7 @@ class BatchMeIfUCan:
         lr_tensor = torch.zeros_like(self.couplings)  # (L+1, N, 3N)
         for idx in range(L):
             lr_tensor[idx, :, :] = lr[idx] / math.sqrt(N)
-        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] * math.sqrt(N / C)
+        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] / math.sqrt(C)  # overwrite
         lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)
         lr_tensor[self.is_learnable == 0] = 0
         assert torch.all((lr_tensor != 0) == self.is_learnable)
@@ -242,8 +242,9 @@ class BatchMeIfUCan:
         return weight_decay_tensor.to(self.device)
 
     def build_ignore_right_mask(self):
-        mask = torch.ones_like(self.couplings)
-        mask[:, :, 2 * self.N : 3 * self.N] = 0
+        N = self.N
+        mask = torch.ones_like(self.couplings).unsqueeze(0).repeat(2, 1, 1, 1)
+        mask[1, :, :, 2 * N : 3 * N] = 0
         return mask.to(self.device)
 
     def initialize_state(
@@ -265,7 +266,7 @@ class BatchMeIfUCan:
             value=0,
         )  # (B, C) -> (B, N)
         y_padded = F.pad(
-            y.clone(),
+            2 * y - 1,
             (0, self.N - self.C, 0, 0),
             mode="constant",
             value=0,
@@ -349,3 +350,11 @@ class BatchMeIfUCan:
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T
         return logits, final_state[:, 1:-2], final_state[:, -2]
+
+    @property
+    def W_back(self):
+        return self.couplings[-2, :, 2 * self.N : 2 * self.N + self.C]
+
+    @property
+    def W_forth(self):
+        return self.couplings[-1, : self.C, : self.N]
