@@ -227,7 +227,7 @@ class BatchMeIfUCan:
             lr_tensor[idx, :, :] = lr[idx] / math.sqrt(N)
         lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] * math.sqrt(N / C)
         lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)
-        lr[self.is_learnable == 0] = 0
+        lr_tensor[self.is_learnable == 0] = 0
         assert torch.all((lr_tensor != 0) == self.is_learnable)
         return lr_tensor.to(self.device)
 
@@ -304,7 +304,7 @@ class BatchMeIfUCan:
         ignore_right: int = 1,
     ):
         fields = self.fields(state, ignore_right=ignore_right)  # shape (B, L+1, N)
-        neurons = state[:, 1:-2, :]  # shape (B, L+1, N)
+        neurons = state[:, 1:-1, :]  # shape (B, L+1, N)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, N)
         is_unstable = (fields * neurons) <= self.threshold[None, :, None]
         delta = (
@@ -326,7 +326,7 @@ class BatchMeIfUCan:
         while sweeps < max_sweeps:
             sweeps += 1
             fields = self.fields(state, ignore_right=ignore_right)
-            state = torch.sign(fields)
+            state[:, 1:-1, :] = torch.sign(fields)
         return state, sweeps
 
     def train_step(
@@ -347,5 +347,5 @@ class BatchMeIfUCan:
     ):
         state = self.initialize_state(x.shape[0], x, torch.zeros((x.shape[0], self.C)))
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
-        logits = final_state[-1, : self.C, : self.N] @ final_state[-3]
+        logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T
         return logits, final_state[:, 1:-2], final_state[:, -2]

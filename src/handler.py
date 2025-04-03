@@ -28,7 +28,7 @@ class Handler:
             accuracy_by_class[cls] = (
                 (predictions[cls_mask] == cls).float().mean().item()
             )
-        fixed_points = {idx: states[idx] for idx in range(self.classifier.L)}
+        fixed_points = {idx: states[:, idx] for idx in range(self.classifier.L)}
         fixed_points[self.classifier.L] = readout
         return {
             "overall_accuracy": accuracy,
@@ -94,17 +94,13 @@ class Handler:
         eval_acc_history = []
         representations = defaultdict(list)  # input, time, layer
         for epoch in range(num_epochs):
-            sweeps, fraction_updates = self.train_epoch(
-                inputs, targets, max_steps, batch_size
-            )
+            sweeps = self.train_epoch(inputs, targets, max_steps, batch_size)
             train_metrics = self.evaluate(inputs, targets, max_steps)
             avg_sweeps = torch.tensor(sweeps).float().mean().item()
-            avg_updates = torch.tensor(fraction_updates).float().mean().item()
             logging.info(
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
                 f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
                 f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Avg fraction of updates per sweep: {avg_updates:.3f}"
             )
             train_acc_history.append(train_metrics["overall_accuracy"])
             if (
