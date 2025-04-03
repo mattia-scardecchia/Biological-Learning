@@ -107,6 +107,7 @@ class BatchMeIfUCan:
         self.lr = self.build_lr_tensor(lr)
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
+        self.ignore_right_mask = self.build_ignore_right_mask()
 
     def initialize_couplings(self):
         couplings_buffer = []
@@ -240,7 +241,17 @@ class BatchMeIfUCan:
         weight_decay_tensor *= self.lr
         return weight_decay_tensor.to(self.device)
 
-    def initialize_state(self, batch_size: int, x: torch.Tensor, y: torch.Tensor):
+    def build_ignore_right_mask(self):
+        mask = torch.ones_like(self.couplings)
+        mask[:, :, 2 * self.N : 3 * self.N] = 0
+        return mask.to(self.device)
+
+    def initialize_state(
+        self,
+        batch_size: int,
+        x: torch.Tensor,
+        y: torch.Tensor,
+    ):
         """
         :param x: shape (batch_size, N)
         :param y: shape (batch_size, C)
@@ -269,7 +280,11 @@ class BatchMeIfUCan:
         )  # NOTE: repeat copies the data
         return state
 
-    def fields(self, state: torch.Tensor):
+    def fields(
+        self,
+        state: torch.Tensor,
+        ignore_right: int = True,
+    ):
         """
         :param state: shape (B, L+3, N)
         :return: shape (B, L+1, N)
@@ -277,13 +292,18 @@ class BatchMeIfUCan:
         state_unfolded = (
             state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)
         )  # Shape: (B, L+1, 3*N)
-        return torch.einsum("lni,bli->bln", self.couplings, state_unfolded)
+        return torch.einsum(
+            "lni,bli->bln",
+            self.couplings * self.ignore_right_mask[ignore_right],
+            state_unfolded,
+        )
 
     def perceptron_rule(
         self,
         state: torch.Tensor,
+        ignore_right: int = 1,
     ):
-        fields = self.fields(state)  # shape (B, L+1, N)
+        fields = self.fields(state, ignore_right=ignore_right)  # shape (B, L+1, N)
         neurons = state[:, 1:-2, :]  # shape (B, L+1, N)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, N)
         is_unstable = (fields * neurons) <= self.threshold[None, :, None]
@@ -295,3 +315,37 @@ class BatchMeIfUCan:
             / math.sqrt(state.shape[0])
         )
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
+
+    def relax(
+        self,
+        state: torch.Tensor,
+        max_sweeps: int,
+        ignore_right: int,
+    ):
+        sweeps = 0
+        while sweeps < max_sweeps:
+            sweeps += 1
+            fields = self.fields(state, ignore_right=ignore_right)
+            state = torch.sign(fields)
+        return state, sweeps
+
+    def train_step(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        max_sweeps: int,
+    ):
+        state = self.initialize_state(x.shape[0], x, y)
+        final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=0)
+        self.perceptron_rule(final_state)
+        return num_sweeps
+
+    def inference(
+        self,
+        x: torch.Tensor,
+        max_sweeps: int,
+    ):
+        state = self.initialize_state(x.shape[0], x, torch.zeros((x.shape[0], self.C)))
+        final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
+        logits = final_state[-1, : self.C, : self.N] @ final_state[-3]
+        return logits, final_state
