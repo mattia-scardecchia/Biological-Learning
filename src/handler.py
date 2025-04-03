@@ -1,6 +1,5 @@
 import logging
 from collections import defaultdict
-from typing import Optional
 
 import numpy as np
 import torch
@@ -71,9 +70,9 @@ class Handler:
         targets: torch.Tensor,
         max_steps: int,
         batch_size: int,
-        eval_interval: Optional[int] = None,
-        eval_inputs: Optional[torch.Tensor] = None,
-        eval_targets: Optional[torch.Tensor] = None,
+        eval_interval: int,
+        eval_inputs: torch.Tensor,
+        eval_targets: torch.Tensor,
     ):
         """
         Trains the network for multiple epochs.

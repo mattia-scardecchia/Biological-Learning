@@ -25,13 +25,13 @@ from src.utils import (
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
-    rng = np.random.default_rng(cfg.seed)
 
     # ================== Data ==================
     if cfg.data.dataset == "synthetic":
         train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
         test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
         C = cfg.data.synthetic.C
+        rng = np.random.default_rng(cfg.seed)
         (
             train_inputs,
             train_targets,
@@ -77,6 +77,11 @@ def main(cfg):
         )
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
+
+    train_inputs = train_inputs.to(cfg.device)
+    train_targets = train_targets.to(cfg.device)
+    eval_inputs = eval_inputs.to(cfg.device)
+    eval_targets = eval_targets.to(cfg.device)
 
     # ================== Model Initialization ==================
     model_kwargs = {

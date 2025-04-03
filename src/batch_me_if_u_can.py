@@ -364,7 +364,9 @@ class BatchMeIfUCan:
         x: torch.Tensor,
         max_sweeps: int,
     ):
-        state = self.initialize_state(x.shape[0], x, torch.zeros((x.shape[0], self.C)))
+        state = self.initialize_state(
+            x.shape[0], x, torch.zeros((x.shape[0], self.C), device=self.device)
+        )
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T
         return logits, final_state[:, 1:-2], final_state[:, -2]
