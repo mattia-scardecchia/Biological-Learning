@@ -17,7 +17,9 @@ def sample_readout_weights(N, C, device, generator):
     return 2 * W - 1
 
 
-def sample_couplings(N, device, generator, J_D):
+def sample_couplings(N, device, generator, J_D, ferromagnetic: bool = False):
+    if ferromagnetic:
+        return torch.diag(torch.ones(N, device=device) * J_D)
     J = torch.randn(N, N, device=device, generator=generator)
     J /= torch.sqrt(torch.tensor(N, device=device))
     J.fill_diagonal_(J_D.item())
@@ -102,14 +104,14 @@ class BatchMeIfUCan:
             self.generator.manual_seed(seed)
             self.cpu_generator.manual_seed(seed)
 
-        self.couplings = self.initialize_couplings()  # L+1, N, 3N
-        self.is_learnable = self.build_is_learnable_mask()
+        self.couplings = self.initialize_couplings(ferromagnetic=True)  # L+1, N, 3N
+        self.is_learnable = self.build_is_learnable_mask(learn_cross_couplings=False)
         self.lr = self.build_lr_tensor(lr)
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
         self.ignore_right_mask = self.build_ignore_right_mask()
 
-    def initialize_couplings(self):
+    def initialize_couplings(self, ferromagnetic: bool = False):
         couplings_buffer = []
 
         # First Layer
@@ -120,14 +122,24 @@ class BatchMeIfUCan:
             sample_couplings(self.N, self.device, self.generator, self.J_D)
         )
         couplings_buffer.append(
-            sample_couplings(self.N, self.device, self.generator, self.lambda_right[0])
+            sample_couplings(
+                self.N,
+                self.device,
+                self.generator,
+                self.lambda_right[0],
+                ferromagnetic,
+            )
         )
 
         # Middle Layers
         for idx in range(1, self.L - 1):
             couplings_buffer.append(
                 sample_couplings(
-                    self.N, self.device, self.generator, self.lambda_left[idx]
+                    self.N,
+                    self.device,
+                    self.generator,
+                    self.lambda_left[idx],
+                    ferromagnetic,
                 )
             )
             couplings_buffer.append(
@@ -135,23 +147,29 @@ class BatchMeIfUCan:
             )
             couplings_buffer.append(
                 sample_couplings(
-                    self.N, self.device, self.generator, self.lambda_right[idx]
+                    self.N,
+                    self.device,
+                    self.generator,
+                    self.lambda_right[idx],
+                    ferromagnetic,
                 )
             )
 
         # Last Layer
         couplings_buffer.append(
             sample_couplings(
-                self.N, self.device, self.generator, self.lambda_left[self.L - 1]
+                self.N,
+                self.device,
+                self.generator,
+                self.lambda_left[self.L - 1],
+                ferromagnetic,
             )
         )
         couplings_buffer.append(
             sample_couplings(self.N, self.device, self.generator, self.J_D)
         )
-        W_back = (
-            sample_readout_weights(self.N, self.C, self.device, self.generator)
-            / self.root_C
-        )
+        W_initial = sample_readout_weights(self.N, self.C, self.device, self.generator)
+        W_back = W_initial.clone() / self.root_C
         couplings_buffer.append(
             F.pad(
                 W_back,
@@ -162,10 +180,7 @@ class BatchMeIfUCan:
         )
 
         # Readout Layer
-        W_forth = (
-            sample_readout_weights(self.N, self.C, self.device, self.generator).T
-            / self.root_N
-        )
+        W_forth = W_initial.clone().T / self.root_N
         couplings_buffer.append(
             F.pad(
                 W_forth,
@@ -202,7 +217,7 @@ class BatchMeIfUCan:
 
         return couplings.to(self.device)
 
-    def build_is_learnable_mask(self):
+    def build_is_learnable_mask(self, learn_cross_couplings: bool = True):
         N, L, C = self.N, self.L, self.C
 
         mask = torch.ones_like(self.couplings)
@@ -211,12 +226,17 @@ class BatchMeIfUCan:
         mask[-2, :, 2 * N + C :] = 0
         mask[0, :, :N] = 0
 
-        for i in range(L):
-            mask[i, :, N : 2 * N].fill_diagonal_(0)
-            if i > 0:
-                mask[i, :, :N].fill_diagonal_(0)
-            if i < L - 1:
-                mask[i, :, 2 * N :].fill_diagonal_(0)
+        for idx in range(L):
+            mask[idx, :, N : 2 * N].fill_diagonal_(0)
+            if idx > 0:
+                mask[idx, :, :N].fill_diagonal_(0)
+            if idx < L - 1:
+                mask[idx, :, 2 * N :].fill_diagonal_(0)
+            if not learn_cross_couplings:
+                if idx > 0:
+                    mask[idx, :, :N] = 0
+                if idx < L - 1:
+                    mask[idx, :, 2 * N : 3 * N] = 0
 
         return mask.to(self.device).to(torch.bool)
 
@@ -228,18 +248,17 @@ class BatchMeIfUCan:
         lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] / math.sqrt(C)  # overwrite
         lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)
         lr_tensor[self.is_learnable == 0] = 0
-        assert torch.all((lr_tensor != 0) == self.is_learnable)
         return lr_tensor.to(self.device)
 
     def build_weight_decay_tensor(self, weight_decay):
         N, L, C = self.N, self.L, self.C
-        weight_decay_tensor = torch.zeros_like(self.couplings)
+        weight_decay_tensor = torch.zeros_like(self.couplings, device=self.device)
         for idx in range(L):
             weight_decay_tensor[idx, :, :] = weight_decay[idx]
         weight_decay_tensor[L - 1, :, 2 * N : 2 * N + C] = weight_decay[-2]
         weight_decay_tensor[L, :C, :N] = weight_decay[-1]
         weight_decay_tensor *= self.lr
-        return weight_decay_tensor.to(self.device)
+        return weight_decay_tensor
 
     def build_ignore_right_mask(self):
         N = self.N
@@ -284,7 +303,7 @@ class BatchMeIfUCan:
     def fields(
         self,
         state: torch.Tensor,
-        ignore_right: int = True,
+        ignore_right: int = 1,
     ):
         """
         :param state: shape (B, L+3, N)
@@ -302,9 +321,8 @@ class BatchMeIfUCan:
     def perceptron_rule(
         self,
         state: torch.Tensor,
-        ignore_right: int = 1,
     ):
-        fields = self.fields(state, ignore_right=ignore_right)  # shape (B, L+1, N)
+        fields = self.fields(state, ignore_right=1)  # shape (B, L+1, N)
         neurons = state[:, 1:-1, :]  # shape (B, L+1, N)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, N)
         is_unstable = (fields * neurons) <= self.threshold[None, :, None]
@@ -358,3 +376,31 @@ class BatchMeIfUCan:
     @property
     def W_forth(self):
         return self.couplings[-1, : self.C, : self.N]
+
+    @property
+    def internal_couplings(self):
+        return self.couplings[:-1, :, self.N : 2 * self.N]
+
+    @property
+    def left_couplings(self):
+        return self.couplings[:, :, : self.N]
+
+    @property
+    def right_couplings(self):
+        return self.couplings[:, :, 2 * self.N : 3 * self.N]
+
+    @property
+    def input_couplings(self):
+        return self.couplings[0, :, : self.N]
+
+    @property
+    def output_couplings(self):
+        return self.couplings[-1, : self.C, 2 * self.N : 2 * self.N + self.C]
+
+    @staticmethod
+    def split_state(state):
+        x = state[:, 0]
+        S = state[:, 1:-2]
+        y_hat = state[:, -2]
+        y = state[:, -1]
+        return x, S, y_hat, y
