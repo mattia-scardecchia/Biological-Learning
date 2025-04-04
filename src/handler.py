@@ -5,10 +5,11 @@ import numpy as np
 import torch
 
 from src.batch_me_if_u_can import BatchMeIfUCan
+from src.classifier import Classifier
 
 
 class Handler:
-    def __init__(self, classifier: BatchMeIfUCan):
+    def __init__(self, classifier: BatchMeIfUCan | Classifier):
         self.classifier = classifier
 
     def evaluate(
@@ -51,16 +52,16 @@ class Handler:
         :param max_steps: maximum relaxation sweeps.
         :return: tuple (list of sweeps per batch, list of update counts per batch)
         """
+        metrics = defaultdict(list)
         num_samples = inputs.shape[0]
         idxs_perm = torch.randperm(num_samples, generator=self.classifier.cpu_generator)
-        sweeps_list = []
         for i in range(0, num_samples, batch_size):
             batch_idxs = idxs_perm[i : i + batch_size]
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
             sweeps = self.classifier.train_step(x, y, max_steps)
-            sweeps_list.append(sweeps)
-        return sweeps_list
+            metrics["sweeps"].append(sweeps)
+        return metrics
 
     @torch.inference_mode()
     def train_loop(
@@ -93,9 +94,13 @@ class Handler:
         eval_acc_history = []
         representations = defaultdict(list)  # input, time, layer
         for epoch in range(num_epochs):
-            sweeps = self.train_epoch(inputs, targets, max_steps, batch_size)
+            convergence_metrics = self.train_epoch(
+                inputs, targets, max_steps, batch_size
+            )
             train_metrics = self.evaluate(inputs, targets, max_steps)
-            avg_sweeps = torch.tensor(sweeps).float().mean().item()
+            avg_sweeps = (
+                torch.tensor(convergence_metrics["sweeps"]).float().mean().item()
+            )
             logging.info(
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
                 f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"

@@ -10,8 +10,10 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
+from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
 from src.data import prepare_cifar, prepare_mnist
+from src.handler import Handler
 from src.utils import (
     load_synthetic_dataset,
     plot_accuracy_by_class_barplot,
@@ -77,6 +79,11 @@ def main(cfg):
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
 
+    train_inputs = train_inputs.to(cfg.device)
+    train_targets = train_targets.to(cfg.device)
+    eval_inputs = eval_inputs.to(cfg.device)
+    eval_targets = eval_targets.to(cfg.device)
+
     # ================== Model Initialization ==================
     model_kwargs = {
         "num_layers": cfg.num_layers,
@@ -87,37 +94,26 @@ def main(cfg):
         "J_D": cfg.J_D,
         "device": cfg.device,
         "seed": cfg.seed,
+        "lr": torch.tensor(cfg.lr),
+        "threshold": torch.tensor(cfg.threshold),
+        "weight_decay": torch.tensor(cfg.weight_decay),
     }
-    model = Classifier(**model_kwargs)
-
-    # ================== Initial Plots ==================
-    init_plots_dir = os.path.join(output_dir, "init")
-    os.makedirs(init_plots_dir, exist_ok=True)
-    fig1, fig2 = model.plot_fields_histograms(x=train_inputs[0:1], y=train_targets[0:1])
-    fig1.suptitle("Fields Breakdown at Initialization, with external fields")
-    fig1.savefig(os.path.join(init_plots_dir, "fields_breakdown.png"))
-    plt.close(fig1)
-    fig2.suptitle("Total Field at Initialization, with external fields")
-    fig2.savefig(os.path.join(init_plots_dir, "total_field.png"))
-    plt.close(fig2)
-    fig3 = model.plot_couplings_histograms()
-    fig3.suptitle("Couplings at Initialization")
-    fig3.savefig(os.path.join(init_plots_dir, "couplings.png"))
-    plt.close(fig3)
+    model_cls = BatchMeIfUCan if cfg.fc_cross else Classifier
+    model = model_cls(**model_kwargs)
+    handler = Handler(model)
 
     # ================== Training ==================
     profiler = cProfile.Profile()
     profiler.enable()
 
+    # torch.mps.profiler.start()
+    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     t0 = time.time()
-    train_acc_history, eval_acc_history, eval_representations = model.train_loop(
+    train_acc_history, eval_acc_history, eval_representations = handler.train_loop(
         cfg.num_epochs,
         train_inputs,
         train_targets,
         cfg.max_steps,
-        torch.tensor(cfg.lr),
-        torch.tensor(cfg.threshold),
-        torch.tensor(cfg.weight_decay),
         cfg.batch_size,
         eval_interval=cfg.eval_interval,
         eval_inputs=eval_inputs,
@@ -125,6 +121,8 @@ def main(cfg):
     )
     t1 = time.time()
     logging.info(f"Training took {t1 - t0:.2f} seconds")
+    # logging.info(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    # torch.mps.profiler.stop()
 
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats("cumtime")
@@ -132,7 +130,7 @@ def main(cfg):
 
     # ================== Evaluation and Plotting ==================
     if not cfg.skip_final_eval:
-        eval_metrics = model.evaluate(eval_inputs, eval_targets, cfg.max_steps)
+        eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
         logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
         t2 = time.time()
         logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
@@ -144,11 +142,6 @@ def main(cfg):
         eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
         fig = plot_accuracy_history(train_acc_history, eval_acc_history, eval_epochs)
         plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
-        plt.close(fig)
-
-        fig = model.plot_couplings_histograms()
-        fig.suptitle("Couplings at the end of training")
-        plt.savefig(os.path.join(output_dir, "couplings.png"))
         plt.close(fig)
 
         representations_plots_dir = os.path.join(output_dir, "representations")

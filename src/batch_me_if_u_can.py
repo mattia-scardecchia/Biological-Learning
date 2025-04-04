@@ -369,7 +369,8 @@ class BatchMeIfUCan:
         )
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T
-        return logits, final_state[:, 1:-2], final_state[:, -2]
+        states, readout = final_state[:, 1:-2], final_state[:, -2]
+        return logits, states, readout
 
     @property
     def W_back(self):

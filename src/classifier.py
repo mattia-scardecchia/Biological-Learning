@@ -1,6 +1,5 @@
 import logging
 import math
-from collections import defaultdict
 from typing import Optional
 
 import numpy as np
@@ -31,6 +30,9 @@ class Classifier:
         J_D: float,
         lambda_left: list[float],
         lambda_right: list[float],
+        lr: torch.Tensor,
+        threshold: torch.Tensor,
+        weight_decay: torch.Tensor,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -45,7 +47,7 @@ class Classifier:
         :param device: 'cpu' or 'cuda'.
         :param seed: optional random seed.
         """
-        self.num_layers = num_layers
+        self.L = num_layers
         self.N = N
         self.C = C
         assert len(lambda_left) == len(lambda_right) == num_layers + 1
@@ -67,6 +69,10 @@ class Classifier:
         self.W_back = self.W_forth.clone()  # C, N
         self.W_forth /= math.sqrt(N)
         self.W_back /= math.sqrt(C)
+
+        self.lr = lr
+        self.threshold = threshold
+        self.weight_decay = weight_decay
 
         logging.info(f"Initialized classifier on device: {self.device}")
         logging.info(
@@ -91,12 +97,12 @@ class Classifier:
         Initializes the internal couplings within each layer."
         """
         Js = []
-        for _ in range(self.num_layers):
+        for _ in range(self.L):
             J = torch.randn(
                 self.N, self.N, device=self.device, generator=self.generator
             )
             J /= math.sqrt(self.N)
-            J.fill_diagonal_(self.J_D)
+            J.fill_diagonal_(self.J_D.item())
             Js.append(J)
         return torch.stack(Js)
 
@@ -127,11 +133,11 @@ class Classifier:
         in the readout layer
         """
         if x is not None:
-            states = [x.clone() for _ in range(self.num_layers)]
+            states = [x.clone() for _ in range(self.L)]
         else:
             states = [
                 initialize_layer(batch_size, self.N, self.device, self.generator)
-                for _ in range(self.num_layers)
+                for _ in range(self.L)
             ]
         readout = initialize_layer(batch_size, self.C, self.device, self.generator)
         return torch.stack(states), readout
@@ -185,7 +191,7 @@ class Classifier:
                 if x is None:
                     return 0
                 return x * self.lambda_left[0]
-            case self.num_layers:
+            case self.L:
                 return torch.matmul(states[-1], self.W_forth.T) * self.lambda_left[-1]
             case _:
                 return states[layer_idx - 1] * self.lambda_left[layer_idx]
@@ -212,11 +218,11 @@ class Classifier:
         readout: torch.Tensor,
         y: Optional[torch.Tensor] = None,
     ):
-        if layer_idx == self.num_layers:
+        if layer_idx == self.L:
             if y is None:
                 return 0
             return (2 * y - 1) * self.lambda_right[-1]
-        elif layer_idx == self.num_layers - 1:
+        elif layer_idx == self.L - 1:
             return torch.matmul(readout, self.W_back) * self.lambda_right[-2]
         else:
             return states[layer_idx + 1] * self.lambda_right[layer_idx]
@@ -250,7 +256,7 @@ class Classifier:
     ):
         internal = (
             self.internal_field_layer(states, layer_idx)
-            if layer_idx < self.num_layers
+            if layer_idx < self.L
             else torch.tensor(0, device=self.device)
         )
         left = self.left_field_layer(states, layer_idx, x)
@@ -394,14 +400,11 @@ class Classifier:
         x: torch.Tensor,
         y: torch.Tensor,
         max_steps: int,
-        lr: torch.Tensor,
-        threshold: torch.Tensor,
-        weight_decay: torch.Tensor,
     ):
         states, readout = self.initialize_neurons_state(x.shape[0], x)
         states, readout, num_sweeps = self.relax(states, readout, x, y, max_steps)
         fraction_updates = self.perceptron_rule_update(
-            states, readout, x, y, lr, threshold, weight_decay
+            states, readout, x, y, self.lr, self.threshold, self.weight_decay
         )
         return num_sweeps, fraction_updates
 
@@ -416,146 +419,137 @@ class Classifier:
             ignore_right=True,
         )
         # logits = torch.matmul(states[-1], self.W_forth.T)
-        logits = self.left_field_layer(states, self.num_layers, x)
-        return logits, states, readout
+        logits = self.left_field_layer(states, self.L, x)
+        return logits, states.permute(1, 0, 2), readout
 
-    def evaluate(self, x: torch.Tensor, y: torch.Tensor, max_steps: int):
-        logits, states, readout = self.inference(x, max_steps)
-        predictions = torch.argmax(logits, dim=1)
-        ground_truth = torch.argmax(y, dim=1)
-        accuracy = (predictions == ground_truth).float().mean().item()
-        accuracy_by_class = {}
-        for cls in range(self.C):
-            cls_mask = ground_truth == cls
-            accuracy_by_class[cls] = (
-                (predictions[cls_mask] == cls).float().mean().item()
-            )
-        fixed_points = {idx: states[idx] for idx in range(self.num_layers)}
-        fixed_points[self.num_layers] = readout
-        return {
-            "overall_accuracy": accuracy,
-            "accuracy_by_class": accuracy_by_class,
-            "fixed_points": fixed_points,
-            "logits": logits,
-        }
+    # def evaluate(self, x: torch.Tensor, y: torch.Tensor, max_steps: int):
+    #     logits, states, readout = self.inference(x, max_steps)
+    #     predictions = torch.argmax(logits, dim=1)
+    #     ground_truth = torch.argmax(y, dim=1)
+    #     accuracy = (predictions == ground_truth).float().mean().item()
+    #     accuracy_by_class = {}
+    #     for cls in range(self.C):
+    #         cls_mask = ground_truth == cls
+    #         accuracy_by_class[cls] = (
+    #             (predictions[cls_mask] == cls).float().mean().item()
+    #         )
+    #     fixed_points = {idx: states[idx] for idx in range(self.L)}
+    #     fixed_points[self.L] = readout
+    #     return {
+    #         "overall_accuracy": accuracy,
+    #         "accuracy_by_class": accuracy_by_class,
+    #         "fixed_points": fixed_points,
+    #         "logits": logits,
+    #     }
 
-    def train_epoch(
-        self,
-        inputs: torch.Tensor,
-        targets: torch.Tensor,
-        max_steps: int,
-        lr: torch.Tensor,
-        threshold: torch.Tensor,
-        weight_decay: torch.Tensor,
-        batch_size: int,
-    ):
-        """
-        Trains the network for one epoch over the training set.
-        Shuffles the dataset and processes mini-batches.
-        :param inputs: tensor of shape (num_samples, N).
-        :param targets: tensor of shape (num_samples, C).
-        :param max_steps: maximum relaxation sweeps.
-        :param lr: learning rate.
-        :param threshold: stability threshold.
-        :param batch_size: mini-batch size.
-        :return: tuple (list of sweeps per batch, list of update counts per batch)
-        """
-        num_samples = inputs.shape[0]
-        idxs_perm = torch.randperm(num_samples, generator=self.cpu_generator)
-        sweeps_list, updates_list = [], []
-        for i in range(0, num_samples, batch_size):
-            batch_idxs = idxs_perm[i : i + batch_size]
-            x = inputs[batch_idxs]
-            y = targets[batch_idxs]
-            sweeps, fraction_updates = self.train_step(
-                x, y, max_steps, lr, threshold, weight_decay
-            )
-            sweeps_list.append(sweeps)
-            updates_list.append(fraction_updates)
-        return sweeps_list, updates_list
+    # def train_epoch(
+    #     self,
+    #     inputs: torch.Tensor,
+    #     targets: torch.Tensor,
+    #     max_steps: int,
+    #     batch_size: int,
+    # ):
+    #     """
+    #     Trains the network for one epoch over the training set.
+    #     Shuffles the dataset and processes mini-batches.
+    #     :param inputs: tensor of shape (num_samples, N).
+    #     :param targets: tensor of shape (num_samples, C).
+    #     :param max_steps: maximum relaxation sweeps.
+    #     :param lr: learning rate.
+    #     :param threshold: stability threshold.
+    #     :param batch_size: mini-batch size.
+    #     :return: tuple (list of sweeps per batch, list of update counts per batch)
+    #     """
+    #     num_samples = inputs.shape[0]
+    #     idxs_perm = torch.randperm(num_samples, generator=self.cpu_generator)
+    #     sweeps_list, updates_list = [], []
+    #     for i in range(0, num_samples, batch_size):
+    #         batch_idxs = idxs_perm[i : i + batch_size]
+    #         x = inputs[batch_idxs]
+    #         y = targets[batch_idxs]
+    #         sweeps, fraction_updates = self.train_step(
+    #             x, y, max_steps, lr, threshold, weight_decay
+    #         )
+    #         sweeps_list.append(sweeps)
+    #         updates_list.append(fraction_updates)
+    #     return sweeps_list, updates_list
 
-    @torch.inference_mode()
-    def train_loop(
-        self,
-        num_epochs: int,
-        inputs: torch.Tensor,
-        targets: torch.Tensor,
-        max_steps: int,
-        lr: torch.Tensor,
-        threshold: torch.Tensor,
-        weight_decay: torch.Tensor,
-        batch_size: int,
-        eval_interval: Optional[int] = None,
-        eval_inputs: Optional[torch.Tensor] = None,
-        eval_targets: Optional[torch.Tensor] = None,
-    ):
-        """
-        Trains the network for multiple epochs.
-        Logs training accuracy and (optionally) validation accuracy.
-        :param num_epochs: number of epochs.
-        :param inputs: training inputs, shape (num_samples, N).
-        :param targets: training targets, shape (num_samples, C).
-        :param max_steps: maximum relaxation sweeps.
-        :param lr: learning rate.
-        :param threshold: stability threshold.
-        :param batch_size: mini-batch size.
-        :param eval_interval: evaluation interval in epochs.
-        :param eval_inputs: validation inputs.
-        :param eval_targets: validation targets.
-        :return: tuple (train accuracy history, eval accuracy history)
-        """
-        assert len(threshold) == self.num_layers + 1
-        assert len(weight_decay) == self.num_layers + 2
-        assert len(lr) == self.num_layers + 2
-        if eval_interval is None:
-            eval_interval = num_epochs + 1  # never evaluate
-        train_acc_history = []
-        eval_acc_history = []
-        representations = defaultdict(list)  # input, time, layer
-        for epoch in range(num_epochs):
-            sweeps, fraction_updates = self.train_epoch(
-                inputs, targets, max_steps, lr, threshold, weight_decay, batch_size
-            )
-            train_metrics = self.evaluate(inputs, targets, max_steps)
-            avg_sweeps = torch.tensor(sweeps).float().mean().item()
-            avg_updates = torch.tensor(fraction_updates).float().mean().item()
-            logging.info(
-                f"Epoch {epoch + 1}/{num_epochs}:\n"
-                f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
-                f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Avg fraction of updates per sweep: {avg_updates:.3f}"
-            )
-            train_acc_history.append(train_metrics["overall_accuracy"])
-            if (
-                (epoch + 1) % eval_interval == 0
-                and eval_inputs is not None
-                and eval_targets is not None
-            ):
-                eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
-                logging.info(f"Val Acc: {eval_metrics['overall_accuracy']:.3f}\n")
-                eval_acc_history.append(eval_metrics["overall_accuracy"])
-                for i in range(len(eval_inputs)):
-                    representations[i].append(
-                        [
-                            eval_metrics["fixed_points"][idx][i]
-                            for idx in range(self.num_layers)
-                        ]
-                    )
-        representations = {
-            i: np.array([[t.cpu() for t in sublist] for sublist in reps])
-            for i, reps in representations.items()
-        }
-        return train_acc_history, eval_acc_history, representations
+    # @torch.inference_mode()
+    # def train_loop(
+    #     self,
+    #     num_epochs: int,
+    #     inputs: torch.Tensor,
+    #     targets: torch.Tensor,
+    #     max_steps: int,
+    #     batch_size: int,
+    #     eval_interval: Optional[int] = None,
+    #     eval_inputs: Optional[torch.Tensor] = None,
+    #     eval_targets: Optional[torch.Tensor] = None,
+    # ):
+    #     """
+    #     Trains the network for multiple epochs.
+    #     Logs training accuracy and (optionally) validation accuracy.
+    #     :param num_epochs: number of epochs.
+    #     :param inputs: training inputs, shape (num_samples, N).
+    #     :param targets: training targets, shape (num_samples, C).
+    #     :param max_steps: maximum relaxation sweeps.
+    #     :param lr: learning rate.
+    #     :param threshold: stability threshold.
+    #     :param batch_size: mini-batch size.
+    #     :param eval_interval: evaluation interval in epochs.
+    #     :param eval_inputs: validation inputs.
+    #     :param eval_targets: validation targets.
+    #     :return: tuple (train accuracy history, eval accuracy history)
+    #     """
+    #     if eval_interval is None:
+    #         eval_interval = num_epochs + 1  # never evaluate
+    #     train_acc_history = []
+    #     eval_acc_history = []
+    #     representations = defaultdict(list)  # input, time, layer
+    #     for epoch in range(num_epochs):
+    #         sweeps, fraction_updates = self.train_epoch(
+    #             inputs,
+    #             targets,
+    #             max_steps,
+    #             batch_size,
+    #         )
+    #         train_metrics = self.evaluate(inputs, targets, max_steps)
+    #         avg_sweeps = torch.tensor(sweeps).float().mean().item()
+    #         avg_updates = torch.tensor(fraction_updates).float().mean().item()
+    #         logging.info(
+    #             f"Epoch {epoch + 1}/{num_epochs}:\n"
+    #             f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
+    #             f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
+    #             f"Avg fraction of updates per sweep: {avg_updates:.3f}"
+    #         )
+    #         train_acc_history.append(train_metrics["overall_accuracy"])
+    #         if (
+    #             (epoch + 1) % eval_interval == 0
+    #             and eval_inputs is not None
+    #             and eval_targets is not None
+    #         ):
+    #             eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
+    #             logging.info(f"Val Acc: {eval_metrics['overall_accuracy']:.3f}\n")
+    #             eval_acc_history.append(eval_metrics["overall_accuracy"])
+    #             for i in range(len(eval_inputs)):
+    #                 representations[i].append(
+    #                     [eval_metrics["fixed_points"][idx][i] for idx in range(self.L)]
+    #                 )
+    #     representations = {
+    #         i: np.array([[t.cpu() for t in sublist] for sublist in reps])
+    #         for i, reps in representations.items()
+    #     }
+    #     return train_acc_history, eval_acc_history, representations
 
     def plot_couplings_histograms(self):
         """
         Plots histograms of the internal coupling values for each hidden layer.
         :return: matplotlib figure.
         """
-        ncols = math.ceil((self.num_layers + 2) / 2)
+        ncols = math.ceil((self.L + 2) / 2)
         fig, axs = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
         axs = axs.flatten()
-        for layer_idx in range(self.num_layers):
+        for layer_idx in range(self.L):
             couplings_np = self.couplings[layer_idx].cpu().numpy().flatten()
             ax = axs[layer_idx]
             ax.hist(couplings_np, bins=30, alpha=0.6, label="Couplings", color="purple")
@@ -563,7 +557,7 @@ class Classifier:
             ax.grid()
             ax.legend()
         for ax, title, W in zip(
-            axs[self.num_layers : self.num_layers + 2],
+            axs[self.L : self.L + 2],
             ["Readout Weights (Forth)", "Readout Weights (Back)"],
             [self.W_forth, self.W_back],
         ):
@@ -577,7 +571,7 @@ class Classifier:
             ax.set_title(title)
             ax.grid()
             ax.legend()
-        for j in range(self.num_layers + 2, len(axs)):
+        for j in range(self.L + 2, len(axs)):
             axs[j].axis("off")
         fig.tight_layout(rect=(0, 0, 1, 0.97))
         return fig
@@ -602,7 +596,7 @@ class Classifier:
         states, readout = self.initialize_neurons_state(batch_size, x)
         if relax_first:
             states, readout, _ = self.relax(states, readout, x, y, max_steps)
-        total_layers = self.num_layers + 1
+        total_layers = self.L + 1
         ncols = math.ceil(total_layers / 2)
         fig_fields, axs_fields = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
         fig_total, axs_total = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
@@ -615,7 +609,7 @@ class Classifier:
         readout_total = readout_left + readout_right
 
         for layer_idx in range(total_layers):
-            if layer_idx == self.num_layers:
+            if layer_idx == self.L:
                 internal = np.zeros_like(readout_left.cpu().numpy()).flatten()
                 left = readout_left.cpu().numpy().flatten()
                 right = readout_right.cpu().numpy().flatten()
@@ -629,7 +623,7 @@ class Classifier:
             ax.hist(internal, bins=30, alpha=0.6, label="Internal", color="blue")
             ax.hist(left, bins=30, alpha=0.6, label="Left", color="green")
             ax.hist(right, bins=30, alpha=0.6, label="Right", color="red")
-            title = f"Layer {layer_idx}" if layer_idx < self.num_layers else "Readout"
+            title = f"Layer {layer_idx}" if layer_idx < self.L else "Readout"
             ax.set_title(title)
             ax.grid()
             ax.legend()

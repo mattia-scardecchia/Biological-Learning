@@ -204,7 +204,7 @@ def plot_representations_similarity_among_layers(
         sns.heatmap(
             sim_matrix, ax=ax, cmap="seismic", vmin=0, vmax=1, cbar=(ax == axes[-1])
         )
-        non_diagonal = ~np.eye(L, dtype=bool)
+        non_diagonal = ~np.eye(L, dtype=bool) if L > 1 else np.ones((L, L), dtype=bool)
         ax.set_title(
             f"Epoch {epoch}. max: {np.max(sim_matrix[non_diagonal]):.2f}, avg: {np.mean(sim_matrix[non_diagonal]):.2f}, min: {np.min(sim_matrix[non_diagonal]):.2f}"
         )
