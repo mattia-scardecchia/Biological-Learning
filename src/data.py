@@ -143,14 +143,16 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffl
         else torch.arange(len(eval_dataset))
     )
     eval_indices = eval_perm[:num_samples_eval]
-    eval_images = [eval_dataset[i][0] for i in eval_indices]
-    eval_labels = [eval_dataset[i][1] for i in eval_indices]
+    eval_images = torch.stack([eval_dataset[i][0] for i in eval_indices])
+    eval_labels = torch.tensor([eval_dataset[i][1] for i in eval_indices])
 
-    # Sort eval samples by class
-    eval_labels_tensor = torch.tensor(eval_labels)
-    sort_idx = torch.argsort(eval_labels_tensor)
-    eval_images = torch.stack(eval_images)[sort_idx]
-    eval_labels = eval_labels_tensor[sort_idx]
+    # Sort samples by class
+    sort_idx = torch.argsort(eval_labels)
+    eval_labels = eval_labels[sort_idx]
+    eval_images = eval_images[sort_idx]
+    sort_idx = torch.argsort(train_labels)
+    train_labels = train_labels[sort_idx]
+    train_images = train_images[sort_idx]
 
     # Convert labels to one-hot encoding
     train_labels = torch.eye(10)[train_labels]
@@ -215,14 +217,16 @@ def prepare_cifar(
         else torch.arange(len(eval_dataset))
     )
     eval_indices = eval_perm[:num_samples_eval]
-    eval_images = [eval_dataset[i][0] for i in eval_indices]
-    eval_labels = [eval_dataset[i][1] for i in eval_indices]
+    eval_images = torch.stack([eval_dataset[i][0] for i in eval_indices])
+    eval_labels = torch.tensor([eval_dataset[i][1] for i in eval_indices])
 
-    # Sort evaluation samples by class for better evaluation insights
-    eval_labels_tensor = torch.tensor(eval_labels)
-    sort_idx = torch.argsort(eval_labels_tensor)
-    eval_images = torch.stack(eval_images)[sort_idx]
-    eval_labels = eval_labels_tensor[sort_idx]
+    # Sort samples by class for better evaluation insights
+    sort_idx = torch.argsort(eval_labels)
+    eval_labels = eval_labels[sort_idx]
+    eval_images = eval_images[sort_idx]
+    sort_idx = torch.argsort(train_labels)
+    train_labels = train_labels[sort_idx]
+    train_images = train_images[sort_idx]
 
     # Convert labels to one-hot encoding
     train_labels = torch.eye(num_classes)[train_labels]

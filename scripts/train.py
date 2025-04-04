@@ -98,9 +98,32 @@ def main(cfg):
         "threshold": torch.tensor(cfg.threshold),
         "weight_decay": torch.tensor(cfg.weight_decay),
     }
-    model_cls = BatchMeIfUCan if cfg.fc_cross else Classifier
+    model_cls = BatchMeIfUCan if cfg.fc else Classifier
     model = model_cls(**model_kwargs)
     handler = Handler(model)
+
+    init_plots_dir = os.path.join(output_dir, "init")
+    os.makedirs(init_plots_dir, exist_ok=True)
+    idxs = np.random.randint(0, len(train_inputs), 100)
+    x = train_inputs[idxs]
+    y = train_targets[idxs]
+    for max_steps in [0, cfg.max_steps]:
+        for ignore_right in [0, 1]:
+            for plot_total in [False, True]:
+                fig, axs = handler.fields_histogram(
+                    x, y, max_steps, ignore_right, plot_total
+                )
+                fig.suptitle(
+                    f"Field Breakdown at Initialization. Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
+                )
+                fig.tight_layout()
+                plt.savefig(
+                    os.path.join(
+                        init_plots_dir,
+                        f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
+                    )
+                )
+                plt.close(fig)
 
     # ================== Training ==================
     profiler = cProfile.Profile()
@@ -109,7 +132,7 @@ def main(cfg):
     # torch.mps.profiler.start()
     # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     t0 = time.time()
-    train_acc_history, eval_acc_history, eval_representations = handler.train_loop(
+    out = handler.train_loop(
         cfg.num_epochs,
         train_inputs,
         train_targets,
@@ -130,44 +153,78 @@ def main(cfg):
 
     # ================== Evaluation and Plotting ==================
     if not cfg.skip_final_eval:
+        # Field Breakdown
+        final_plots_dir = os.path.join(output_dir, "final")
+        os.makedirs(final_plots_dir, exist_ok=True)
+        idxs = np.random.randint(0, len(train_inputs), 100)
+        x = train_inputs[idxs]
+        y = train_targets[idxs]
+        for max_steps in [0, cfg.max_steps]:
+            for ignore_right in [0, 1]:
+                for plot_total in [False, True]:
+                    fig, axs = handler.fields_histogram(
+                        x, y, max_steps, ignore_right, plot_total
+                    )
+                    fig.suptitle(
+                        f"Field Breakdown at End of Training. Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
+                    )
+                    fig.tight_layout()
+                    plt.savefig(
+                        os.path.join(
+                            final_plots_dir,
+                            f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
+                        )
+                    )
+                    plt.close(fig)
+
+        # Evaluate final model and plot Accuracy
         eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
         logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
         t2 = time.time()
         logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
-
         fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
         plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
         plt.close(fig)
-
         eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
-        fig = plot_accuracy_history(train_acc_history, eval_acc_history, eval_epochs)
+        fig = plot_accuracy_history(
+            out["train_acc_history"], out["eval_acc_history"], eval_epochs
+        )
         plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
         plt.close(fig)
 
-        representations_plots_dir = os.path.join(output_dir, "representations")
-        os.makedirs(representations_plots_dir, exist_ok=True)
-        for epoch in np.linspace(0, cfg.num_epochs - 1, 3).astype(int):
-            fig = plot_representation_similarity_among_inputs(
-                eval_representations, epoch, layer_skip=1
-            )
-            plt.savefig(os.path.join(representations_plots_dir, f"epoch_{epoch}.png"))
-            plt.close(fig)
-        for input_idx in np.random.choice(len(eval_inputs), 3, replace=False):
+        # Representations
+        representations_root_dir = os.path.join(output_dir, "representations")
+        os.makedirs(representations_root_dir, exist_ok=True)
+        for representations, dirname in zip(
+            [out["eval_representations"], out["train_representations"]],
+            ["eval", "train"],
+        ):
+            plot_dir = os.path.join(representations_root_dir, dirname)
+            os.makedirs(plot_dir, exist_ok=True)
+            for epoch in np.linspace(
+                0, cfg.num_epochs - 1, min(5, cfg.num_epochs - 2)
+            ).astype(int):
+                fig = plot_representation_similarity_among_inputs(
+                    representations, epoch, layer_skip=1
+                )
+                plt.savefig(os.path.join(plot_dir, f"epoch_{epoch}.png"))
+                plt.close(fig)
+            for input_idx in np.random.choice(
+                list(representations.keys()), 3, replace=False
+            ):
+                fig = plot_representations_similarity_among_layers(
+                    representations, input_idx, 5
+                )
+                plt.savefig(os.path.join(plot_dir, f"input_{input_idx}.png"))
+                plt.close(fig)
             fig = plot_representations_similarity_among_layers(
-                eval_representations, input_idx, 5
+                representations, None, 5, True
             )
-            plt.savefig(
-                os.path.join(representations_plots_dir, f"input_{input_idx}.png")
-            )
+            plt.savefig(os.path.join(plot_dir, "avg_over_inputs.png"))
             plt.close(fig)
-        fig = plot_representations_similarity_among_layers(
-            eval_representations, None, 5, True
-        )
-        plt.savefig(os.path.join(representations_plots_dir, "avg_over_inputs.png"))
-        plt.close(fig)
 
-    logging.info("Best train accuracy: {:.2f}".format(np.max(train_acc_history)))
-    logging.info("Best eval accuracy: {:.2f}".format(np.max(eval_acc_history)))
+    logging.info("Best train accuracy: {:.2f}".format(np.max(out["train_acc_history"])))
+    logging.info("Best eval accuracy: {:.2f}".format(np.max(out["eval_acc_history"])))
 
 
 if __name__ == "__main__":

@@ -15,10 +15,10 @@ J_D: 0.2
 max_steps: 5                                  # full sweeps over the network (relaxation)
 lambda_left: [0, 2.0, 2.0, 2.0, 2.0, 1.0]   # first is lambda_x, last affects the readout layer
 lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 4.0]  # last is lambda_y, last but one affects the readout layer
-fc_cross: false
+fc: false
 
 # Perceptron Rule
-num_epochs: 15
+num_epochs: 10
 batch_size: 16
 lr: [0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 0.01]           # scaled by typical weight size. last two are for W_back and W_forth
 threshold: [2.5, 2.5, 2.5, 2.5, 2.5, 2.5]                     # perceptron rule. last is for readout layer

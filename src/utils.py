@@ -259,7 +259,7 @@ def load_synthetic_dataset(
             train_data_dir,
             None,
             rng,
-            shuffle=True,
+            shuffle=False,
             load_if_available=True,
             dump=True,
         )

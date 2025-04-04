@@ -268,7 +268,6 @@ class BatchMeIfUCan:
 
     def initialize_state(
         self,
-        batch_size: int,
         x: torch.Tensor,
         y: torch.Tensor,
     ):
@@ -277,6 +276,7 @@ class BatchMeIfUCan:
         :param y: shape (batch_size, C)
         :return: shape (batch_size, L+3, N)
         """
+        batch_size = x.shape[0]
         y_hat = sample_state(self.C, batch_size, self.device, self.generator)
         y_hat = F.pad(
             y_hat,
@@ -300,7 +300,7 @@ class BatchMeIfUCan:
         )  # NOTE: repeat copies the data
         return state
 
-    def fields(
+    def local_field(
         self,
         state: torch.Tensor,
         ignore_right: int = 1,
@@ -322,7 +322,7 @@ class BatchMeIfUCan:
         self,
         state: torch.Tensor,
     ):
-        fields = self.fields(state, ignore_right=1)  # shape (B, L+1, N)
+        fields = self.local_field(state, ignore_right=1)  # shape (B, L+1, N)
         neurons = state[:, 1:-1, :]  # shape (B, L+1, N)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, N)
         is_unstable = (fields * neurons) <= self.threshold[None, :, None]
@@ -338,13 +338,13 @@ class BatchMeIfUCan:
     def relax(
         self,
         state: torch.Tensor,
-        max_sweeps: int,
+        max_steps: int,
         ignore_right: int,
     ):
         sweeps = 0
-        while sweeps < max_sweeps:
+        while sweeps < max_steps:
             sweeps += 1
-            fields = self.fields(state, ignore_right=ignore_right)
+            fields = self.local_field(state, ignore_right=ignore_right)
             state[:, 1:-1, :] = torch.sign(fields)
         return state, sweeps
 
@@ -354,10 +354,12 @@ class BatchMeIfUCan:
         y: torch.Tensor,
         max_sweeps: int,
     ):
-        state = self.initialize_state(x.shape[0], x, y)
+        state = self.initialize_state(x, y)
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=0)
         self.perceptron_rule(final_state)
-        return num_sweeps
+        return {
+            "sweeps": num_sweeps,
+        }
 
     def inference(
         self,
@@ -365,7 +367,7 @@ class BatchMeIfUCan:
         max_sweeps: int,
     ):
         state = self.initialize_state(
-            x.shape[0], x, torch.zeros((x.shape[0], self.C), device=self.device)
+            x, torch.zeros((x.shape[0], self.C), device=self.device)
         )
         final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T
@@ -386,11 +388,11 @@ class BatchMeIfUCan:
 
     @property
     def left_couplings(self):
-        return self.couplings[:, :, : self.N]
+        return self.couplings[1:-1, :, : self.N]
 
     @property
     def right_couplings(self):
-        return self.couplings[:, :, 2 * self.N : 3 * self.N]
+        return self.couplings[0:-2, :, 2 * self.N : 3 * self.N]
 
     @property
     def input_couplings(self):
@@ -402,8 +404,28 @@ class BatchMeIfUCan:
 
     @staticmethod
     def split_state(state):
-        x = state[:, 0]
-        S = state[:, 1:-2]
-        y_hat = state[:, -2]
-        y = state[:, -1]
+        x = state[:, 0, :]
+        S = state[:, 1:-2, :]
+        y_hat = state[:, -2, :]
+        y = state[:, -1, :]
         return x, S, y_hat, y
+
+    def field_breakdown(self, state, x, y):
+        internal = torch.einsum(
+            "lni,bli->bln", self.couplings[:, :, self.N : 2 * self.N], state[:, 1:-1, :]
+        )
+        left = torch.einsum(
+            "lni,bli->bln", self.couplings[:, :, : self.N], state[:, 0:-2, :]
+        )
+        right = torch.einsum(
+            "lni,bli->bln",
+            self.couplings[:, :, 2 * self.N : 3 * self.N],
+            state[:, 2:, :],
+        )
+        total = internal + left + right
+        return {
+            "internal": internal,
+            "left": left,
+            "right": right,
+            "total": total,
+        }
