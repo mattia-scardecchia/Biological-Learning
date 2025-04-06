@@ -16,7 +16,7 @@ class Handler:
 
     def evaluate(
         self,
-        x: torch.Tensor,
+        x: torch.Tensor,  # B, N
         y: torch.Tensor,
         max_steps: int,
     ):
@@ -30,11 +30,15 @@ class Handler:
             accuracy_by_class[cls] = (
                 (predictions[cls_mask] == cls).float().mean().item()
             )
+        similarity_to_input = torch.einsum("bln,bn->l", states, x) / (
+            self.classifier.N * x.shape[0]
+        )
         return {
             "overall_accuracy": accuracy,
             "accuracy_by_class": accuracy_by_class,
             "fixed_points": states,  # B, L, N
-            "logits": logits,
+            "logits": logits,  # B, C
+            "similarity_to_input": (similarity_to_input + 1) / 2,  # L,
         }
 
     def train_epoch(
@@ -55,19 +59,31 @@ class Handler:
         metrics = defaultdict(list)
         num_samples = inputs.shape[0]
         idxs_perm = torch.randperm(num_samples, generator=self.classifier.cpu_generator)
-        for i in range(0, num_samples, batch_size):
+        for i in range(0, num_samples - batch_size + 1, batch_size):
             batch_idxs = idxs_perm[i : i + batch_size]
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
             out = self.classifier.train_step(x, y, max_steps)
             metrics["sweeps"].append(out["sweeps"])
+            metrics["hidden_updates"].append(out["hidden_updates"])
+            metrics["readout_updates"].append(out["readout_updates"])
+            metrics["hidden_unsat"].append(out["hidden_unsat"])
+            metrics["readout_unsat"].append(out["readout_unsat"])
+        for key in ["hidden_updates", "hidden_unsat"]:
+            metrics[key] = torch.stack(metrics[key]).mean(
+                dim=(0, 1, 3), dtype=torch.float32
+            )
+        for key in ["readout_updates", "readout_unsat"]:
+            metrics[key] = torch.stack(metrics[key]).mean(
+                dim=(0, 1, 2), dtype=torch.float32
+            )
         return metrics
 
     def flush_logs(self):
         self.logs = {
             "train_acc_history": [],
-            "train_representations": [],
             "eval_acc_history": [],
+            "train_representations": [],
             "eval_representations": [],
             "W_forth": [],
             "W_back": [],
@@ -79,6 +95,8 @@ class Handler:
     def log(self, metrics, type):
         # Accuracy
         self.logs[f"{type}_acc_history"].append(metrics["overall_accuracy"])
+
+        # Representations
         eval_batch_size = len(metrics["fixed_points"])
         idxs = np.linspace(
             0,
@@ -86,8 +104,6 @@ class Handler:
             min(self.classifier.C * 30, eval_batch_size),
             endpoint=False,
         ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
-
-        # Representations
         self.logs[f"{type}_representations"].append(
             metrics["fixed_points"][idxs, :, :].clone()
         )
@@ -140,15 +156,24 @@ class Handler:
                 self.log(eval_metrics, type="eval")
 
             out = self.train_epoch(inputs, targets, max_steps, batch_size)
-            logging.info(
+
+            message = (
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
-                f"Avg number of full sweeps: {np.mean(out['sweeps']):.1f}\n"
-                f"Train Acc: {train_metrics['overall_accuracy'] * 100:.1f}%\n"
-            )  # NOTE: we log accuracy of the model before training epoch
+                f"Full Sweeps: {np.mean(out['sweeps']):.1f}\n"
+                "Unsat after Relaxation:  "
+                f"{', '.join([format(x, '.2f') for x in (out['hidden_unsat'].tolist() + [float(out['readout_unsat'])])])}\n"
+                "Perceptron Rule Updates: "
+                f"{', '.join([format(x, '.2f') for x in (out['hidden_updates'].tolist() + [float(out['readout_updates'])])])}\n"
+                "Similarity of Representations to Inputs: \n"
+                f"   Train patterns:       {', '.join([format(x, '.2f') for x in train_metrics['similarity_to_input'].tolist()])}\n"
+            )
             if (epoch + 1) % eval_interval == 0:
-                logging.info(
-                    f"Eval Acc: {eval_metrics['overall_accuracy'] * 100:.1f}%\n"
-                )
+                message += f"   Eval patterns:        {', '.join([format(x, '.2f') for x in eval_metrics['similarity_to_input'].tolist()])}\n"
+            message += f"\nTrain Acc: {train_metrics['overall_accuracy'] * 100:.1f}%\n"
+            if (epoch + 1) % eval_interval == 0:
+                message += f"Eval Acc:  {eval_metrics['overall_accuracy'] * 100:.1f}%\n"
+
+            logging.info(message)  # NOTE: we log before training epoch
 
         for type in ["train", "eval"]:
             repr_tensor = torch.stack(
@@ -175,7 +200,7 @@ class Handler:
         state = self.classifier.initialize_state(x, y)
         if max_steps:
             kwargs = {"x": x, "y": y} if isinstance(self.classifier, Classifier) else {}
-            state, _ = self.classifier.relax(
+            state, _, _ = self.classifier.relax(
                 state,
                 max_steps=max_steps,
                 ignore_right=ignore_right,

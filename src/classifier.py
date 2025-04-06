@@ -1,12 +1,9 @@
 import logging
 import math
-from collections import defaultdict
 from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn.functional as F
-from matplotlib import pyplot as plt
 
 
 def initialize_layer(
@@ -303,11 +300,9 @@ class Classifier:
             )
             new_states = self.sign(hidden_field)
             new_readout = self.sign(readout_field)
-            # if torch.equal(readout, new_readout) and torch.equal(states, new_states):
-            #     break
             states, readout = new_states, new_readout
-        # print(self.num_unsat_neurons(states, readout, x, y) / states.numel())
-        return (states, readout), steps
+        hidden_unsat, readout_unsat = self.fraction_unsat_neurons(states, readout, x, y)
+        return (states, readout), steps, (hidden_unsat.permute(1, 0, 2), readout_unsat)
 
     # def relax(
     #     self,
@@ -347,10 +342,12 @@ class Classifier:
     ):
         # update J
         hidden_field, readout_field = self.local_field(states, readout, x, y, True)
-        is_unstable = ((hidden_field * states) <= threshold[:-1, None, None]).float()
+        is_unstable_hidden = (
+            (hidden_field * states) <= threshold[:-1, None, None]
+        ).float()
         delta_J = (
             lr[:-2, None, None]
-            * torch.matmul((is_unstable * states).transpose(1, 2), states)
+            * torch.matmul((is_unstable_hidden * states).transpose(1, 2), states)
             / math.sqrt(self.N)
             / math.sqrt(x.shape[0])
         )
@@ -365,11 +362,10 @@ class Classifier:
             + delta_J
         )
         self.internal_couplings[self.diagonal_mask] = self.J_D
-        fraction_updates = is_unstable.mean().item()
 
         # update W_back
         delta_W_back = (
-            (lr[-2] * torch.matmul((is_unstable[-1] * states[-1]).T, readout).T)
+            (lr[-2] * torch.matmul((is_unstable_hidden[-1] * states[-1]).T, readout).T)
             / math.sqrt(self.C)
             / math.sqrt(x.shape[0])
         )
@@ -391,7 +387,7 @@ class Classifier:
             + delta_W_forth
         )
 
-        return fraction_updates
+        return is_unstable_hidden.permute(1, 0, 2), is_unstable_readout
 
     def train_step(
         self,
@@ -400,10 +396,10 @@ class Classifier:
         max_steps: int,
     ):
         states, readout = self.initialize_state(x, y)
-        (final_states, final_readout), num_sweeps = self.relax(
-            (states, readout), x, y, max_steps
+        (final_states, final_readout), num_sweeps, (hidden_unsat, readout_unsat) = (
+            self.relax((states, readout), x, y, max_steps)
         )
-        fraction_updates = self.perceptron_rule_update(
+        hidden_updates, readout_updates = self.perceptron_rule_update(
             final_states,
             final_readout,
             x,
@@ -414,12 +410,15 @@ class Classifier:
         )
         return {
             "sweeps": num_sweeps,
-            "fraction_updates": fraction_updates,
+            "hidden_updates": hidden_updates,  # B, L, N
+            "readout_updates": readout_updates,  # B, C
+            "hidden_unsat": hidden_unsat,  # B, L, N
+            "readout_unsat": readout_unsat,  # B, C
         }
 
     def inference(self, x: torch.Tensor, max_steps: int):
         initial_states, initial_readout = self.initialize_state(x, y=None)
-        (states, readout), _ = self.relax(
+        (states, readout), _, _ = self.relax(
             (initial_states, initial_readout),
             x,
             y=None,
@@ -430,235 +429,20 @@ class Classifier:
         logits = self.left_field_layer(states, self.L, x)
         return logits, states.permute(1, 0, 2), readout
 
-    # NOTE: legacy
-    def evaluate(self, x: torch.Tensor, y: torch.Tensor, max_steps: int):
-        logits, states, readout = self.inference(x, max_steps)
-        predictions = torch.argmax(logits, dim=1)
-        ground_truth = torch.argmax(y, dim=1)
-        accuracy = (predictions == ground_truth).float().mean().item()
-        accuracy_by_class = {}
-        for cls in range(self.C):
-            cls_mask = ground_truth == cls
-            accuracy_by_class[cls] = (
-                (predictions[cls_mask] == cls).float().mean().item()
-            )
-        fixed_points = {idx: states[idx] for idx in range(self.L)}
-        fixed_points[self.L] = readout
-        return {
-            "overall_accuracy": accuracy,
-            "accuracy_by_class": accuracy_by_class,
-            "fixed_points": fixed_points,
-            "logits": logits,
-        }
-
-    # NOTE: legacy
-    def train_epoch(
-        self,
-        inputs: torch.Tensor,
-        targets: torch.Tensor,
-        max_steps: int,
-        batch_size: int,
-    ):
-        """
-        Trains the network for one epoch over the training set.
-        Shuffles the dataset and processes mini-batches.
-        :param inputs: tensor of shape (num_samples, N).
-        :param targets: tensor of shape (num_samples, C).
-        :param max_steps: maximum relaxation sweeps.
-        :param lr: learning rate.
-        :param threshold: stability threshold.
-        :param batch_size: mini-batch size.
-        :return: tuple (list of sweeps per batch, list of update counts per batch)
-        """
-        num_samples = inputs.shape[0]
-        idxs_perm = torch.randperm(num_samples, generator=self.cpu_generator)
-        sweeps_list, updates_list = [], []
-        for i in range(0, num_samples, batch_size):
-            batch_idxs = idxs_perm[i : i + batch_size]
-            x = inputs[batch_idxs]
-            y = targets[batch_idxs]
-            out = self.train_step(x, y, max_steps)
-            sweeps_list.append(out["sweeps"])
-            updates_list.append(out["fraction_updates"])
-        return sweeps_list, updates_list
-
-    # NOTE: legacy
-    @torch.inference_mode()
-    def train_loop(
-        self,
-        num_epochs: int,
-        inputs: torch.Tensor,
-        targets: torch.Tensor,
-        max_steps: int,
-        batch_size: int,
-        eval_interval: Optional[int] = None,
-        eval_inputs: Optional[torch.Tensor] = None,
-        eval_targets: Optional[torch.Tensor] = None,
-    ):
-        """
-        Trains the network for multiple epochs.
-        Logs training accuracy and (optionally) validation accuracy.
-        :param num_epochs: number of epochs.
-        :param inputs: training inputs, shape (num_samples, N).
-        :param targets: training targets, shape (num_samples, C).
-        :param max_steps: maximum relaxation sweeps.
-        :param lr: learning rate.
-        :param threshold: stability threshold.
-        :param batch_size: mini-batch size.
-        :param eval_interval: evaluation interval in epochs.
-        :param eval_inputs: validation inputs.
-        :param eval_targets: validation targets.
-        :return: tuple (train accuracy history, eval accuracy history)
-        """
-        if eval_interval is None:
-            eval_interval = num_epochs + 1  # never evaluate
-        train_acc_history = []
-        eval_acc_history = []
-        representations = defaultdict(list)  # input, time, layer
-        for epoch in range(num_epochs):
-            sweeps, fraction_updates = self.train_epoch(
-                inputs,
-                targets,
-                max_steps,
-                batch_size,
-            )
-            train_metrics = self.evaluate(inputs, targets, max_steps)
-            avg_sweeps = torch.tensor(sweeps).float().mean().item()
-            avg_updates = torch.tensor(fraction_updates).float().mean().item()
-            logging.info(
-                f"Epoch {epoch + 1}/{num_epochs}:\n"
-                f"Train Acc: {train_metrics['overall_accuracy']:.3f}\n"
-                f"Avg number of full sweeps: {avg_sweeps:.3f}\n"
-                f"Avg fraction of updates per sweep: {avg_updates:.3f}"
-            )
-            train_acc_history.append(train_metrics["overall_accuracy"])
-            if (
-                (epoch + 1) % eval_interval == 0
-                and eval_inputs is not None
-                and eval_targets is not None
-            ):
-                eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
-                logging.info(f"Val Acc: {eval_metrics['overall_accuracy']:.3f}\n")
-                eval_acc_history.append(eval_metrics["overall_accuracy"])
-                for i in range(len(eval_inputs)):
-                    representations[i].append(
-                        [eval_metrics["fixed_points"][idx][i] for idx in range(self.L)]
-                    )
-        representations = {
-            i: np.array([[t.cpu() for t in sublist] for sublist in reps])
-            for i, reps in representations.items()
-        }
-        return train_acc_history, eval_acc_history, representations
-
-    def plot_couplings_histograms(self):
-        """
-        Plots histograms of the internal coupling values for each hidden layer.
-        :return: matplotlib figure.
-        """
-        ncols = math.ceil((self.L + 2) / 2)
-        fig, axs = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
-        axs = axs.flatten()
-        for layer_idx in range(self.L):
-            couplings_np = self.internal_couplings[layer_idx].cpu().numpy().flatten()
-            ax = axs[layer_idx]
-            ax.hist(couplings_np, bins=30, alpha=0.6, label="Couplings", color="purple")
-            ax.set_title(f"Layer {layer_idx}")
-            ax.grid()
-            ax.legend()
-        for ax, title, W in zip(
-            axs[self.L : self.L + 2],
-            ["Readout Weights (Forth)", "Readout Weights (Back)"],
-            [self.W_forth, self.W_back],
-        ):
-            ax.hist(
-                W.cpu().numpy().flatten(),
-                bins=30,
-                alpha=0.6,
-                label="Readout Weights",
-                color="blue",
-            )
-            ax.set_title(title)
-            ax.grid()
-            ax.legend()
-        for j in range(self.L + 2, len(axs)):
-            axs[j].axis("off")
-        fig.tight_layout(rect=(0, 0, 1, 0.97))
-        return fig
-
-    def plot_fields_histograms(
-        self,
-        x: Optional[torch.Tensor] = None,
-        y: Optional[torch.Tensor] = None,
-        relax_first: bool = False,
-        max_steps: int = 100,
-    ):
-        """
-        Plots histograms of the various field components (internal, left, right, total)
-        at each layer.
-        :param x: input tensor of shape (batch, N).
-        :param y: target tensor of shape (batch, C).
-        :param relax_first: whether to relax the network before plotting.
-        :param max_steps: maximum relaxation sweeps for obtaining a fixed point.
-        :return: tuple of figures (fields figure, total fields figure)
-        """
-        batch_size = x.shape[0] if x is not None else 1
-        states, readout = self.initialize_state(x, y)
-        if relax_first:
-            (states, readout), _ = self.relax((states, readout), x, y, max_steps)
-        total_layers = self.L + 1
-        ncols = math.ceil(total_layers / 2)
-        fig_fields, axs_fields = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
-        fig_total, axs_total = plt.subplots(2, ncols, figsize=(5 * ncols, 8))
-        axs_fields = axs_fields.flatten()
-        axs_total = axs_total.flatten()
-        hidden_internal = self.internal_field(states)
-        hidden_right, readout_right = self.right_field(states, readout, y)
-        hidden_left, readout_left = self.left_field(states, x)
-        hidden_total = hidden_internal + hidden_left + hidden_right
-        readout_total = readout_left + readout_right
-
-        for layer_idx in range(total_layers):
-            if layer_idx == self.L:
-                internal = np.zeros_like(readout_left.cpu().numpy()).flatten()
-                left = readout_left.cpu().numpy().flatten()
-                right = readout_right.cpu().numpy().flatten()
-                total = readout_total.cpu().numpy().flatten()
-            else:
-                internal = hidden_internal[layer_idx].cpu().numpy().flatten()
-                left = hidden_left[layer_idx].cpu().numpy().flatten()
-                right = hidden_right[layer_idx].cpu().numpy().flatten()
-                total = hidden_total[layer_idx].cpu().numpy().flatten()
-            ax = axs_fields[layer_idx]
-            ax.hist(internal, bins=30, alpha=0.6, label="Internal", color="blue")
-            ax.hist(left, bins=30, alpha=0.6, label="Left", color="green")
-            ax.hist(right, bins=30, alpha=0.6, label="Right", color="red")
-            title = f"Layer {layer_idx}" if layer_idx < self.L else "Readout"
-            ax.set_title(title)
-            ax.grid()
-            ax.legend()
-            ax_total = axs_total[layer_idx]
-            ax_total.hist(total, bins=30, alpha=0.6, label="Total", color="black")
-            ax_total.set_title(title)
-            ax_total.grid()
-            ax_total.legend()
-
-        for j in range(total_layers, len(axs_fields)):
-            axs_fields[j].axis("off")
-            axs_total[j].axis("off")
-        fig_fields.tight_layout(rect=(0, 0, 1, 0.97))
-        fig_total.tight_layout(rect=(0, 0, 1, 0.97))
-        return fig_fields, fig_total
-
-    def num_unsat_neurons(
+    def fraction_unsat_neurons(
         self,
         states,
         readout,
-        x: Optional[torch.Tensor] = None,
-        y: Optional[torch.Tensor] = None,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        ignore_right: bool = False,
     ):
-        hidden_field, readout_field = self.local_field(states, readout, x, y)
-        is_unstable = ((hidden_field * states) <= 0).float()
-        return is_unstable.sum().item()
+        hidden_field, readout_field = self.local_field(
+            states, readout, x, y, ignore_right
+        )
+        is_unsat_hidden = (hidden_field * states) <= 0
+        is_unsat_readout = (readout_field * readout) <= 0
+        return is_unsat_hidden, is_unsat_readout
 
     @property
     def left_couplings(self):

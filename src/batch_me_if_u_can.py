@@ -334,6 +334,7 @@ class BatchMeIfUCan:
             / math.sqrt(state.shape[0])
         )
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
+        return is_unstable
 
     def relax(
         self,
@@ -346,7 +347,8 @@ class BatchMeIfUCan:
             sweeps += 1
             fields = self.local_field(state, ignore_right=ignore_right)
             state[:, 1:-1, :] = torch.sign(fields)
-        return state, sweeps
+        unsat = self.fraction_unsat(state)
+        return state, sweeps, unsat
 
     def train_step(
         self,
@@ -355,10 +357,14 @@ class BatchMeIfUCan:
         max_sweeps: int,
     ):
         state = self.initialize_state(x, y)
-        final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=0)
-        self.perceptron_rule(final_state)
+        final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=0)
+        made_update = self.perceptron_rule(final_state)
         return {
             "sweeps": num_sweeps,
+            "hidden_updates": made_update[:, :-1, :],
+            "readout_updates": made_update[:, -1, : self.C],
+            "hidden_unsat": unsat[:, :-1, :],
+            "readout_unsat": unsat[:, -1, : self.C],
         }
 
     def inference(
@@ -369,7 +375,7 @@ class BatchMeIfUCan:
         state = self.initialize_state(
             x, torch.zeros((x.shape[0], self.C), device=self.device)
         )
-        final_state, num_sweeps = self.relax(state, max_sweeps, ignore_right=1)
+        final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T
         states, readout = final_state[:, 1:-2], final_state[:, -2]
         return logits, states, readout
@@ -429,3 +435,8 @@ class BatchMeIfUCan:
             "right": right,
             "total": total,
         }
+
+    def fraction_unsat(self, state, ignore_right: int = 0):
+        fields = self.local_field(state, ignore_right=ignore_right)
+        is_unsat = (fields * state[:, 1:-1, :]) <= 0
+        return is_unsat
