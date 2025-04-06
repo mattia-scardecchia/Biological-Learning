@@ -8,9 +8,10 @@ import pandas as pd
 import torch
 from hydra.core.hydra_config import HydraConfig
 
+from scripts.train import get_data, parse_config
+from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
-from src.data import prepare_mnist
-from src.utils import load_synthetic_dataset
+from src.handler import Handler
 
 # HYPERPARAM_GRID = {
 #     "lr_J": [0.05, 0.075, 0.1],
@@ -33,48 +34,13 @@ HYPERPARAM_GRID = {
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
-    rng = np.random.default_rng(cfg.seed)
+    lr, weight_decay, threshold, lambda_left, lambda_right = parse_config(cfg)
 
-    # ================== Data ==================
-    if cfg.data.dataset == "synthetic":
-        train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
-        test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
-        train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
-        test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
-        (
-            train_inputs,
-            train_targets,
-            eval_inputs,
-            eval_targets,
-            train_metadata,
-            train_class_prototypes,
-            eval_metadata,
-            eval_class_prototypes,
-        ) = load_synthetic_dataset(
-            cfg.N,
-            cfg.data.P,
-            cfg.data.synthetic.C,
-            cfg.data.synthetic.p,
-            cfg.data.P_eval,
-            rng,
-            train_data_dir,
-            test_data_dir,
-            cfg.device,
-        )
-        C = cfg.data.synthetic.C
-    elif cfg.data.dataset == "mnist":
-        train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
-            prepare_mnist(
-                cfg.data.P * 10,
-                cfg.data.P_eval * 10,
-                cfg.N,
-                cfg.data.mnist.binarize,
-                cfg.seed,
-            )
-        )
-        C = 10
-    else:
-        raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
+    train_inputs, train_targets, eval_inputs, eval_targets, C = get_data(cfg)
+    train_inputs = train_inputs.to(cfg.device)
+    train_targets = train_targets.to(cfg.device)
+    eval_inputs = eval_inputs.to(cfg.device)
+    eval_targets = eval_targets.to(cfg.device)
 
     # ================== Begin Grid Search ==================
 
@@ -87,20 +53,17 @@ def main(cfg):
         hyperparams = dict(zip(HYPERPARAM_GRID.keys(), values))
         # lambda_left = (
         #     [hyperparams["lambda_x"]]
-        #     + [hyperparams["lambda_left"]] * (cfg.num_layers - 1)
+        #     + [hyperparams["lambda_l"]] * (cfg.num_layers - 1)
         #     + [1.0]
         # )
         # lambda_right = (
-        #     [hyperparams["lambda_left"]] * (cfg.num_layers - 1)
+        #     [hyperparams["lambda_r"]] * (cfg.num_layers - 1)
         #     + [1.0]
-        #     + [hyperparams["lambda_x"]]
+        #     + [hyperparams["lambda_y"]]
         # )
         # weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
         #     hyperparams["weight_decay_W"]
         # ] * 2
-        lambda_left = cfg.lambda_left
-        lambda_right = cfg.lambda_right
-        weight_decay = cfg.weight_decay
         lr = [hyperparams["lr_J"]] * cfg.num_layers + [hyperparams["lr_W"]] * 2
         threshold = [hyperparams["threshold"]] * (cfg.num_layers + 1)
 
@@ -115,29 +78,35 @@ def main(cfg):
             "J_D": cfg.J_D,
             "device": cfg.device,
             "seed": cfg.seed,
+            "lr": torch.tensor(lr),
+            "threshold": torch.tensor(threshold),
+            "weight_decay": torch.tensor(weight_decay),
         }
-        model = Classifier(**model_kwargs)
-        train_acc_history, eval_acc_history, eval_representations = model.train_loop(
+        model_cls = BatchMeIfUCan if cfg.fc else Classifier
+        model = model_cls(**model_kwargs)
+        handler = Handler(model)
+
+        logs = handler.train_loop(
             cfg.num_epochs,
             train_inputs,
             train_targets,
             cfg.max_steps,
-            torch.tensor(lr),
-            torch.tensor(threshold),
-            torch.tensor(weight_decay),
             cfg.batch_size,
-            cfg.eval_interval,
-            eval_inputs,
-            eval_targets,
+            eval_interval=cfg.eval_interval,
+            eval_inputs=eval_inputs,
+            eval_targets=eval_targets,
         )
 
         # ================== Log results ==================
 
         max_train_acc, final_train_acc = (
-            np.max(train_acc_history),
-            train_acc_history[-1],
+            np.max(logs["train_acc_history"]),
+            logs["train_acc_history"][-1],
         )
-        max_eval_acc, final_eval_acc = np.max(eval_acc_history), eval_acc_history[-1]
+        max_eval_acc, final_eval_acc = (
+            np.max(logs["eval_acc_history"]),
+            logs["eval_acc_history"][-1],
+        )
         result_row = {
             key: val
             for key, val in hyperparams.items()

@@ -25,33 +25,58 @@ from src.utils import (
 )
 
 
-@hydra.main(config_path="../configs", config_name="train", version_base="1.3")
-def main(cfg):
-    output_dir = HydraConfig.get().runtime.output_dir
+def plot_representation_similarity(logs, save_dir, cfg):
+    for representations, dirname in zip(
+        [logs["eval_representations"], logs["train_representations"]],
+        ["eval", "train"],
+    ):
+        plot_dir = os.path.join(save_dir, dirname)
+        os.makedirs(plot_dir, exist_ok=True)
+        for epoch in np.linspace(
+            0, cfg.num_epochs, min(5, cfg.num_epochs), endpoint=False
+        ).astype(int):
+            fig = plot_representation_similarity_among_inputs(
+                representations, epoch, layer_skip=1
+            )
+            plt.savefig(os.path.join(plot_dir, f"epoch_{epoch}.png"))
+            plt.close(fig)
+        for input_idx in np.random.choice(
+            list(representations.keys()), 3, replace=False
+        ):
+            fig = plot_representations_similarity_among_layers(
+                representations, input_idx, 5
+            )
+            plt.savefig(os.path.join(plot_dir, f"input_{input_idx}.png"))
+            plt.close(fig)
+        fig = plot_representations_similarity_among_layers(
+            representations, None, 5, True
+        )
+        plt.savefig(os.path.join(plot_dir, "avg_over_inputs.png"))
+        plt.close(fig)
 
-    # ================== Config ==================
-    try:
-        lr = cfg.lr
-    except Exception:
-        lr = [cfg.lr_J] * cfg.num_layers + [cfg.lr_W] * 2
-    try:
-        weight_decay = cfg.weight_decay
-    except Exception:
-        weight_decay = [cfg.weight_decay_J] * cfg.num_layers + [cfg.weight_decay_W] * 2
-    try:
-        threshold = cfg.threshold
-    except Exception:
-        threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
-    try:
-        lambda_left = cfg.lambda_left
-    except Exception:
-        lambda_left = [cfg.lambda_x] + [cfg.lambda_l] * (cfg.num_layers - 1) + [1.0]
-    try:
-        lambda_right = cfg.lambda_right
-    except Exception:
-        lambda_right = [cfg.lambda_r] * (cfg.num_layers - 1) + [1.0] + [cfg.lambda_y]
 
-    # ================== Data ==================
+def plot_fields_breakdown(handler, cfg, save_dir, title, x, y):
+    for max_steps in [0, cfg.max_steps]:
+        for ignore_right in [0, 1]:
+            for plot_total in [False, True]:
+                fig, axs = handler.fields_histogram(
+                    x, y, max_steps, ignore_right, plot_total
+                )
+                fig.suptitle(
+                    title
+                    + f". Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
+                )
+                fig.tight_layout()
+                plt.savefig(
+                    os.path.join(
+                        save_dir,
+                        f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
+                    )
+                )
+                plt.close(fig)
+
+
+def get_data(cfg):
     if cfg.data.dataset == "synthetic":
         train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
         test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
@@ -102,7 +127,39 @@ def main(cfg):
         )
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
+    return train_inputs, train_targets, eval_inputs, eval_targets, C
 
+
+def parse_config(cfg):
+    try:
+        lr = cfg.lr
+    except Exception:
+        lr = [cfg.lr_J] * cfg.num_layers + [cfg.lr_W] * 2
+    try:
+        weight_decay = cfg.weight_decay
+    except Exception:
+        weight_decay = [cfg.weight_decay_J] * cfg.num_layers + [cfg.weight_decay_W] * 2
+    try:
+        threshold = cfg.threshold
+    except Exception:
+        threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
+    try:
+        lambda_left = cfg.lambda_left
+    except Exception:
+        lambda_left = [cfg.lambda_x] + [cfg.lambda_l] * (cfg.num_layers - 1) + [1.0]
+    try:
+        lambda_right = cfg.lambda_right
+    except Exception:
+        lambda_right = [cfg.lambda_r] * (cfg.num_layers - 1) + [1.0] + [cfg.lambda_y]
+    return lr, weight_decay, threshold, lambda_left, lambda_right
+
+
+@hydra.main(config_path="../configs", config_name="train", version_base="1.3")
+def main(cfg):
+    output_dir = HydraConfig.get().runtime.output_dir
+    lr, weight_decay, threshold, lambda_left, lambda_right = parse_config(cfg)
+
+    train_inputs, train_targets, eval_inputs, eval_targets, C = get_data(cfg)
     train_inputs = train_inputs.to(cfg.device)
     train_targets = train_targets.to(cfg.device)
     eval_inputs = eval_inputs.to(cfg.device)
@@ -133,23 +190,14 @@ def main(cfg):
     idxs = np.random.randint(0, len(train_inputs), 100)
     x = train_inputs[idxs]
     y = train_targets[idxs]
-    for max_steps in [0, cfg.max_steps]:
-        for ignore_right in [0, 1]:
-            for plot_total in [False, True]:
-                fig, axs = handler.fields_histogram(
-                    x, y, max_steps, ignore_right, plot_total
-                )
-                fig.suptitle(
-                    f"Field Breakdown at Initialization. Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
-                )
-                fig.tight_layout()
-                plt.savefig(
-                    os.path.join(
-                        init_plots_dir,
-                        f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
-                    )
-                )
-                plt.close(fig)
+    plot_fields_breakdown(
+        handler,
+        cfg,
+        init_plots_dir,
+        "Field Breakdown at Initialization",
+        x,
+        y,
+    )
 
     # ================== Training ==================
     profiler = cProfile.Profile()
@@ -181,26 +229,14 @@ def main(cfg):
     # Field Breakdown
     final_plots_dir = os.path.join(fields_plots_dir, "final")
     os.makedirs(final_plots_dir, exist_ok=True)
-    idxs = np.random.randint(0, len(train_inputs), 100)
-    x = train_inputs[idxs]
-    y = train_targets[idxs]
-    for max_steps in [0, cfg.max_steps]:
-        for ignore_right in [0, 1]:
-            for plot_total in [False, True]:
-                fig, axs = handler.fields_histogram(
-                    x, y, max_steps, ignore_right, plot_total
-                )
-                fig.suptitle(
-                    f"Field Breakdown at End of Training. Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
-                )
-                fig.tight_layout()
-                plt.savefig(
-                    os.path.join(
-                        final_plots_dir,
-                        f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
-                    )
-                )
-                plt.close(fig)
+    plot_fields_breakdown(
+        handler,
+        cfg,
+        final_plots_dir,
+        "Field Breakdown at the End of Training",
+        train_inputs,
+        train_targets,
+    )
 
     # Evaluate final model and plot Accuracy
     eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
@@ -221,33 +257,7 @@ def main(cfg):
         # Representations
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
-        for representations, dirname in zip(
-            [logs["eval_representations"], logs["train_representations"]],
-            ["eval", "train"],
-        ):
-            plot_dir = os.path.join(representations_root_dir, dirname)
-            os.makedirs(plot_dir, exist_ok=True)
-            for epoch in np.linspace(
-                0, cfg.num_epochs, min(5, cfg.num_epochs), endpoint=False
-            ).astype(int):
-                fig = plot_representation_similarity_among_inputs(
-                    representations, epoch, layer_skip=1
-                )
-                plt.savefig(os.path.join(plot_dir, f"epoch_{epoch}.png"))
-                plt.close(fig)
-            for input_idx in np.random.choice(
-                list(representations.keys()), 3, replace=False
-            ):
-                fig = plot_representations_similarity_among_layers(
-                    representations, input_idx, 5
-                )
-                plt.savefig(os.path.join(plot_dir, f"input_{input_idx}.png"))
-                plt.close(fig)
-            fig = plot_representations_similarity_among_layers(
-                representations, None, 5, True
-            )
-            plt.savefig(os.path.join(plot_dir, "avg_over_inputs.png"))
-            plt.close(fig)
+        plot_representation_similarity(logs, representations_root_dir, cfg)
 
     # Couplings
     couplings_root_dir = os.path.join(output_dir, "couplings")
