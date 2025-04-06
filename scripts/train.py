@@ -132,7 +132,7 @@ def main(cfg):
     # torch.mps.profiler.start()
     # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     t0 = time.time()
-    out = handler.train_loop(
+    logs = handler.train_loop(
         cfg.num_epochs,
         train_inputs,
         train_targets,
@@ -187,7 +187,7 @@ def main(cfg):
         plt.close(fig)
         eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
         fig = plot_accuracy_history(
-            out["train_acc_history"], out["eval_acc_history"], eval_epochs
+            logs["train_acc_history"], logs["eval_acc_history"], eval_epochs
         )
         plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
         plt.close(fig)
@@ -196,13 +196,13 @@ def main(cfg):
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
         for representations, dirname in zip(
-            [out["eval_representations"], out["train_representations"]],
+            [logs["eval_representations"], logs["train_representations"]],
             ["eval", "train"],
         ):
             plot_dir = os.path.join(representations_root_dir, dirname)
             os.makedirs(plot_dir, exist_ok=True)
             for epoch in np.linspace(
-                0, cfg.num_epochs - 1, min(5, cfg.num_epochs - 2)
+                0, cfg.num_epochs, min(5, cfg.num_epochs), endpoint=False
             ).astype(int):
                 fig = plot_representation_similarity_among_inputs(
                     representations, epoch, layer_skip=1
@@ -223,8 +223,10 @@ def main(cfg):
             plt.savefig(os.path.join(plot_dir, "avg_over_inputs.png"))
             plt.close(fig)
 
-    logging.info("Best train accuracy: {:.2f}".format(np.max(out["train_acc_history"])))
-    logging.info("Best eval accuracy: {:.2f}".format(np.max(out["eval_acc_history"])))
+    logging.info(
+        "Best train accuracy: {:.2f}".format(np.max(logs["train_acc_history"]))
+    )
+    logging.info("Best eval accuracy: {:.2f}".format(np.max(logs["eval_acc_history"])))
 
 
 if __name__ == "__main__":

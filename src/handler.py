@@ -30,11 +30,10 @@ class Handler:
             accuracy_by_class[cls] = (
                 (predictions[cls_mask] == cls).float().mean().item()
             )
-        fixed_points = {idx: states[:, idx] for idx in range(self.classifier.L)}
         return {
             "overall_accuracy": accuracy,
             "accuracy_by_class": accuracy_by_class,
-            "fixed_points": fixed_points,
+            "fixed_points": states,  # B, L, N
             "logits": logits,
         }
 
@@ -67,31 +66,21 @@ class Handler:
     def flush_logs(self):
         self.logs = {
             "train_acc_history": [],
-            "train_representations": {},
+            "train_representations": [],
             "eval_acc_history": [],
-            "eval_representations": {},
+            "eval_representations": [],
         }
 
     def log(self, metrics, type):
         self.logs[f"{type}_acc_history"].append(metrics["overall_accuracy"])
-        if self.logs[f"{type}_representations"] == {}:
-            num_inputs = len(metrics["fixed_points"][0])
-            input_idxs = np.random.choice(
-                range(num_inputs),
-                min(self.classifier.C * 30, num_inputs),
-                replace=False,
-            )
-            input_idxs.sort()
-            for i in input_idxs:
-                self.logs[f"{type}_representations"][int(i)] = []
-        else:
-            for i, lst in self.logs[f"{type}_representations"].items():
-                lst.append(
-                    [
-                        metrics["fixed_points"][idx][i]
-                        for idx in range(self.classifier.L)
-                    ]
-                )
+        eval_batch_size = len(metrics["fixed_points"])
+        idxs = np.linspace(
+            0,
+            eval_batch_size,
+            min(self.classifier.C * 30, eval_batch_size),
+            endpoint=False,
+        ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+        self.logs[f"{type}_representations"].append(metrics["fixed_points"][idxs, :, :])
 
     @torch.inference_mode()
     def train_loop(
@@ -141,14 +130,15 @@ class Handler:
                     f"Eval Acc: {eval_metrics['overall_accuracy'] * 100:.1f}%\n"
                 )
 
-        self.logs["eval_representations"] = {
-            i: np.array([[t.cpu() for t in sublist] for sublist in reps])
-            for i, reps in self.logs["eval_representations"].items()
-        }
-        self.logs["train_representations"] = {
-            i: np.array([[t.cpu() for t in sublist] for sublist in reps])
-            for i, reps in self.logs["train_representations"].items()
-        }
+        for type in ["train", "eval"]:
+            repr_tensor = torch.stack(
+                self.logs[f"{type}_representations"], dim=0
+            ).permute(1, 0, 2, 3)  # B, T, L, N
+            repr_dict = {
+                idx: repr_tensor[idx, :, :, :].cpu().numpy()
+                for idx in range(repr_tensor.shape[0])
+            }
+            self.logs[f"{type}_representations"] = repr_dict
         return self.logs
 
     def fields_histogram(self, x, y, max_steps=0, ignore_right=0, plot_total=False):
