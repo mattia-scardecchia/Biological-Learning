@@ -29,6 +29,28 @@ from src.utils import (
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
 
+    # ================== Config ==================
+    try:
+        lr = cfg.lr
+    except Exception:
+        lr = [cfg.lr_J] * cfg.num_layers + [cfg.lr_W] * 2
+    try:
+        weight_decay = cfg.weight_decay
+    except Exception:
+        weight_decay = [cfg.weight_decay_J] * cfg.num_layers + [cfg.weight_decay_W] * 2
+    try:
+        threshold = cfg.threshold
+    except Exception:
+        threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
+    try:
+        lambda_left = cfg.lambda_left
+    except Exception:
+        lambda_left = [cfg.lambda_x] + [cfg.lambda_l] * (cfg.num_layers - 1) + [1.0]
+    try:
+        lambda_right = cfg.lambda_right
+    except Exception:
+        lambda_right = [cfg.lambda_r] * (cfg.num_layers - 1) + [1.0] + [cfg.lambda_y]
+
     # ================== Data ==================
     if cfg.data.dataset == "synthetic":
         train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
@@ -91,14 +113,14 @@ def main(cfg):
         "num_layers": cfg.num_layers,
         "N": cfg.N,
         "C": C,
-        "lambda_left": cfg.lambda_left,
-        "lambda_right": cfg.lambda_right,
+        "lambda_left": lambda_left,
+        "lambda_right": lambda_right,
         "J_D": cfg.J_D,
         "device": cfg.device,
         "seed": cfg.seed,
-        "lr": torch.tensor(cfg.lr),
-        "threshold": torch.tensor(cfg.threshold),
-        "weight_decay": torch.tensor(cfg.weight_decay),
+        "lr": torch.tensor(lr),
+        "threshold": torch.tensor(threshold),
+        "weight_decay": torch.tensor(weight_decay),
     }
     model_cls = BatchMeIfUCan if cfg.fc else Classifier
     model = model_cls(**model_kwargs)

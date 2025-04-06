@@ -1,3 +1,4 @@
+import logging
 import math
 from typing import Optional
 
@@ -110,6 +111,20 @@ class BatchMeIfUCan:
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
         self.ignore_right_mask = self.build_ignore_right_mask()
+
+        logging.info(f"Initialized {self} on device: {self.device}")
+        logging.info(
+            f"Parameters:\n"
+            f"N={N},\n"
+            f"C={C},\n"
+            f"num_layers={num_layers},\n"
+            f"J_D={J_D},\n"
+            f"lambda_left={lambda_left},\n"
+            f"lambda_right={lambda_right},\n"
+            f"lr={lr},\n"
+            f"threshold={threshold},\n"
+            f"weight_decay={weight_decay}\n"
+        )
 
     def initialize_couplings(self, ferromagnetic: bool = False):
         couplings_buffer = []

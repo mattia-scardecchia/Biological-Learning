@@ -73,9 +73,18 @@ class Classifier:
         self.threshold = threshold
         self.weight_decay = weight_decay
 
-        logging.info(f"Initialized classifier on device: {self.device}")
+        logging.info(f"Initialized {self} on device: {self.device}")
         logging.info(
-            f"Parameters: N={N}, C={C}, num_layers={num_layers}, J_D={J_D}, lambda_left={lambda_left}, lambda_right={lambda_right}"
+            f"Parameters:\n"
+            f"N={N},\n"
+            f"C={C},\n"
+            f"num_layers={num_layers},\n"
+            f"J_D={J_D},\n"
+            f"lambda_left={lambda_left},\n"
+            f"lambda_right={lambda_right},\n"
+            f"lr={lr},\n"
+            f"threshold={threshold},\n"
+            f"weight_decay={weight_decay}\n"
         )
 
         # self.fixed_noise = torch.stack(

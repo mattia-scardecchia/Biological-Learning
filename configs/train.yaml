@@ -13,16 +13,26 @@ N: 1000
 num_layers: 5
 J_D: 0.2
 max_steps: 5                                  # full sweeps over the network (relaxation)
-lambda_left: [0, 2.0, 2.0, 2.0, 2.0, 1.0]   # first is lambda_x, last affects the readout layer
-lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 4.0]  # last is lambda_y, last but one affects the readout layer
 fc: false
+# lambda_left: [0, 2.0, 2.0, 2.0, 2.0, 1.0]     # first is lambda_x, last affects the readout layer
+# lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 4.0]  # last is lambda_y, last but one affects the readout layer
+lambda_x: 0.0
+lambda_y: 4.0
+lambda_l: 2.0
+lambda_r: 4.0
 
 # Perceptron Rule
 num_epochs: 10
 batch_size: 16
-lr: [0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 0.01]           # scaled by typical weight size. last two are for W_back and W_forth
-threshold: [2.5, 2.5, 2.5, 2.5, 2.5, 2.5]                     # perceptron rule. last is for readout layer
-weight_decay: [0.001, 0.001, 0.001, 0.001, 0.001, 0.0, 0.0]   # scaled by learning rate. last two are for W_back and W_forth
+# lr: [0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 0.01]                     # scaled by typical weight size. last two are for W_back and W_forth
+# threshold: [2.5, 2.5, 2.5, 2.5, 2.5, 2.5]                     # perceptron rule. last is for readout layer
+# weight_decay: [0.001, 0.001, 0.001, 0.001, 0.001, 0.0, 0.0]   # scaled by learning rate. last two are for W_back and W_forth
+lr_J: 0.1
+lr_W: 0.01
+threshold_hidden: 2.5
+threshold_readout: 2.5
+weight_decay_J: 0.001
+weight_decay_W: 0.0
 
 # Evaluation
 eval_interval: 1        # epochs
