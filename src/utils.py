@@ -1,3 +1,4 @@
+import math
 from typing import Dict, List
 
 import numpy as np
@@ -293,3 +294,223 @@ def load_synthetic_dataset(
         eval_metadata,
         eval_class_prototypes,
     )
+
+
+def create_subplots(n_subplots, row_height=3, col_width=8):
+    """
+    Create subplots in a grid with two rows (if n_subplots > 1).
+    """
+    rows = 2 if n_subplots > 1 else 1
+    cols = math.ceil(n_subplots / rows)
+    fig, axes = plt.subplots(rows, cols, figsize=(col_width * cols, row_height * rows))
+    if n_subplots == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+    return fig, axes
+
+
+def plot_couplings_histograms(logs, time_indexes, bins=30):
+    """
+    Plot histograms for the evolution of coupling distributions at specified time indexes.
+
+    Parameters:
+        logs (dict): Dictionary with the following keys and expected numpy array shapes:
+            - "W_forth": np.array of shape (T, C, N)
+            - "W_back": np.array of shape (T, N, C)
+            - "internal_couplings": np.array of shape (T, L, N, N)
+            - "left_couplings": np.array of shape (T, L, N, N)
+            - "right_couplings": np.array of shape (T, L, N, N)
+        time_indexes (list of int): List of time step indices at which to plot histograms.
+        bins (int, optional): Number of bins for the histogram plots (default is 50).
+
+    Legend for shapes:
+        T: Number of time steps.
+        L: Number of layers.
+        N: Number of neurons per layer.
+        C: Number of classes.
+
+    Behavior:
+        - Creates one figure for "internal_couplings" with one subplot per layer.
+        - Creates one figure for "left_couplings" combined with "W_forth":
+              one subplot per layer for "left_couplings" and an extra subplot for "W_forth".
+        - Creates one figure for "right_couplings" combined with "W_back":
+              one subplot per layer for "right_couplings" and an extra subplot for "W_back".
+        - In each subplot, histograms are plotted for the given time indexes with a legend indicating the time.
+    """
+    figs = {}
+
+    # 1. Internal Couplings
+    internal = logs["internal_couplings"]  # shape: (T, L, N, N)
+    T, L, _, _ = internal.shape
+    fig_int, axes_int = create_subplots(L)
+    for l in range(L):
+        ax = axes_int[l]
+        for t in time_indexes:
+            data = internal[t, l].flatten()
+            ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+        ax.set_title(f"Layer {l}")
+        ax.legend()
+        ax.grid(True)
+    fig_int.suptitle("Internal Couplings (density)")
+    fig_int.tight_layout()
+    figs["internal"] = fig_int
+
+    # 2. Left Couplings + W_forth
+    left = logs["left_couplings"]  # shape: (T, L-1, N, N)
+    W_forth = logs["W_forth"]  # shape: (T, C, N)
+    fig_left, axes_left = create_subplots(L)
+    for l in range(L - 1):
+        ax = axes_left[l]
+        for t in time_indexes:
+            data = left[t, l].flatten()
+            ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+        ax.set_title(f"Layer {l + 1}")
+        ax.legend()
+        ax.grid(True)
+    ax = axes_left[L - 1]
+    for t in time_indexes:
+        data = W_forth[t].flatten()
+        ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+    ax.set_title("Readout layer (W_forth)")
+    ax.legend()
+    ax.grid(True)
+    fig_left.suptitle("Left Couplings (density)")
+    fig_left.tight_layout()
+    figs["left"] = fig_left
+
+    # 3. Right Couplings + W_back
+    right = logs["right_couplings"]  # shape: (T, L-1, N, N)
+    W_back = logs["W_back"]  # shape: (T, N, C)
+    fig_right, axes_right = create_subplots(L)
+    for l in range(L - 1):
+        ax = axes_right[l]
+        for t in time_indexes:
+            data = right[t, l].flatten()
+            ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+        ax.set_title(f"Layer {l}")
+        ax.legend()
+        ax.grid(True)
+    ax = axes_right[L - 1]
+    for t in time_indexes:
+        data = W_back[t].flatten()
+        ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+    ax.set_title(f"Layer {L} (W_back)")
+    ax.legend()
+    ax.grid(True)
+    fig_right.suptitle("Right Couplings (density)")
+    fig_right.tight_layout()
+    figs["right"] = fig_right
+
+    return figs
+
+
+def plot_couplings_distro_evolution(logs):
+    """
+    Plot the evolution over time of the mean and standard deviation for each coupling distribution.
+
+    Parameters:
+        logs (dict): Dictionary with the following keys and expected numpy array shapes:
+            - "W_forth": np.array of shape (T, C, N)
+            - "W_back": np.array of shape (T, N, C)
+            - "internal_couplings": np.array of shape (T, L, N, N)
+            - "left_couplings": np.array of shape (T, L, N, N)
+            - "right_couplings": np.array of shape (T, L, N, N)
+
+    Legend for shapes:
+        T: Number of time steps.
+        L: Number of layers.
+        N: Number of neurons per layer.
+        C: Number of classes.
+
+    Behavior:
+        - For each key, computes the mean and standard deviation across all dimensions except the time dimension.
+        - For "internal_couplings": Plots one subplot per layer showing the evolution (over time) of mean with error bars representing std.
+        - For "left_couplings" and "W_forth": Plots one subplot per layer for left couplings and an extra subplot for W_forth.
+        - For "right_couplings" and "W_back": Plots one subplot per layer for right couplings and an extra subplot for W_back.
+    """
+    figs = {}
+
+    # 1. Internal Couplings Evolution
+    internal = logs["internal_couplings"]  # shape: (T, L, N, N)
+    T, L, _, _ = internal.shape
+    fig_int, axes_int = create_subplots(L)
+    for l in range(L):
+        means, stds = [], []
+        for t in range(T):
+            data = internal[t, l].flatten()
+            means.append(np.mean(data))
+            stds.append(np.std(data))
+        ax = axes_int[l]
+        ax.errorbar(np.arange(T), means, yerr=stds, fmt="-o")
+        ax.set_title(f"Layer {l}")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Value")
+        ax.grid(True)
+    fig_int.suptitle("Internal Couplings - Evolution of Mean and Std")
+    fig_int.tight_layout()
+    figs["internal"] = fig_int
+
+    # 2. Left Couplings + W_forth Evolution
+    left = logs["left_couplings"]  # shape: (T, L-1, N, N)
+    W_forth = logs["W_forth"]  # shape: (T, C, N)
+    fig_left, axes_left = create_subplots(L)
+    for l in range(L - 1):
+        means, stds = [], []
+        for t in range(T):
+            data = left[t, l].flatten()
+            means.append(np.mean(data))
+            stds.append(np.std(data))
+        ax = axes_left[l]
+        ax.errorbar(np.arange(T), means, yerr=stds, fmt="-o")
+        ax.set_title(f"Layer {l + 1}")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Value")
+        ax.grid(True)
+    means, stds = [], []
+    for t in range(T):
+        data = W_forth[t].flatten()
+        means.append(np.mean(data))
+        stds.append(np.std(data))
+    ax = axes_left[L - 1]
+    ax.errorbar(np.arange(T), means, yerr=stds, fmt="-o")
+    ax.set_title("W_forth Evolution")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Value")
+    ax.grid(True)
+    fig_left.suptitle("Left Couplings - Evolution of Mean and Std")
+    fig_left.tight_layout()
+    figs["left"] = fig_left
+
+    # 3. Right Couplings + W_back Evolution
+    right = logs["right_couplings"]  # shape: (T, L-1, N, N)
+    W_back = logs["W_back"]  # shape: (T, N, C)
+    fig_right, axes_right = create_subplots(L)
+    for l in range(L - 1):
+        means, stds = [], []
+        for t in range(T):
+            data = right[t, l].flatten()
+            means.append(np.mean(data))
+            stds.append(np.std(data))
+        ax = axes_right[l]
+        ax.errorbar(np.arange(T), means, yerr=stds, fmt="-o")
+        ax.set_title(f"Layer {l}")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Value")
+        ax.grid(True)
+    means, stds = [], []
+    for t in range(T):
+        data = W_back[t].flatten()
+        means.append(np.mean(data))
+        stds.append(np.std(data))
+    ax = axes_right[L - 1]
+    ax.errorbar(np.arange(T), means, yerr=stds, fmt="-o")
+    ax.set_title("W_back Evolution")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Value")
+    ax.grid(True)
+    fig_right.suptitle("Right Couplings - Evolution of Mean and Std")
+    fig_right.tight_layout()
+    figs["right"] = fig_right
+
+    return figs

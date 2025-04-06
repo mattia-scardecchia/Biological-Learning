@@ -69,9 +69,15 @@ class Handler:
             "train_representations": [],
             "eval_acc_history": [],
             "eval_representations": [],
+            "W_forth": [],
+            "W_back": [],
+            "internal_couplings": [],
+            "left_couplings": [],
+            "right_couplings": [],
         }
 
     def log(self, metrics, type):
+        # Accuracy
         self.logs[f"{type}_acc_history"].append(metrics["overall_accuracy"])
         eval_batch_size = len(metrics["fixed_points"])
         idxs = np.linspace(
@@ -80,7 +86,21 @@ class Handler:
             min(self.classifier.C * 30, eval_batch_size),
             endpoint=False,
         ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
-        self.logs[f"{type}_representations"].append(metrics["fixed_points"][idxs, :, :])
+
+        # Representations
+        self.logs[f"{type}_representations"].append(
+            metrics["fixed_points"][idxs, :, :].clone()
+        )
+
+        # Couplings
+        if type == "eval":
+            self.logs["W_forth"].append(self.classifier.W_forth.clone())
+            self.logs["W_back"].append(self.classifier.W_back.clone())
+            self.logs["internal_couplings"].append(
+                self.classifier.internal_couplings.clone()
+            )
+            self.logs["left_couplings"].append(self.classifier.left_couplings.clone())
+            self.logs["right_couplings"].append(self.classifier.right_couplings.clone())
 
     @torch.inference_mode()
     def train_loop(
@@ -139,6 +159,16 @@ class Handler:
                 for idx in range(repr_tensor.shape[0])
             }
             self.logs[f"{type}_representations"] = repr_dict
+
+        for key in [
+            "W_forth",  # T, C, N
+            "W_back",  # T, N, C
+            "internal_couplings",  # T, L, N, N
+            "left_couplings",  # T, L, N, N
+            "right_couplings",  # T, L, N, N
+        ]:
+            self.logs[key] = torch.stack(self.logs[key], dim=0).cpu().numpy()
+
         return self.logs
 
     def fields_histogram(self, x, y, max_steps=0, ignore_right=0, plot_total=False):

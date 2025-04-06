@@ -18,6 +18,8 @@ from src.utils import (
     load_synthetic_dataset,
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
+    plot_couplings_distro_evolution,
+    plot_couplings_histograms,
     plot_representation_similarity_among_inputs,
     plot_representations_similarity_among_layers,
 )
@@ -102,7 +104,9 @@ def main(cfg):
     model = model_cls(**model_kwargs)
     handler = Handler(model)
 
-    init_plots_dir = os.path.join(output_dir, "init")
+    fields_plots_dir = os.path.join(output_dir, "fields")
+    os.makedirs(fields_plots_dir, exist_ok=True)
+    init_plots_dir = os.path.join(fields_plots_dir, "init")
     os.makedirs(init_plots_dir, exist_ok=True)
     idxs = np.random.randint(0, len(train_inputs), 100)
     x = train_inputs[idxs]
@@ -154,7 +158,7 @@ def main(cfg):
     # ================== Evaluation and Plotting ==================
     if not cfg.skip_final_eval:
         # Field Breakdown
-        final_plots_dir = os.path.join(output_dir, "final")
+        final_plots_dir = os.path.join(fields_plots_dir, "final")
         os.makedirs(final_plots_dir, exist_ok=True)
         idxs = np.random.randint(0, len(train_inputs), 100)
         x = train_inputs[idxs]
@@ -221,6 +225,18 @@ def main(cfg):
                 representations, None, 5, True
             )
             plt.savefig(os.path.join(plot_dir, "avg_over_inputs.png"))
+            plt.close(fig)
+
+        # Couplings
+        couplings_root_dir = os.path.join(output_dir, "couplings")
+        os.makedirs(couplings_root_dir, exist_ok=True)
+        figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1], bins=100)
+        for key, fig in figs.items():
+            fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
+            plt.close(fig)
+        figs = plot_couplings_distro_evolution(logs)
+        for key, fig in figs.items():
+            fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
             plt.close(fig)
 
     logging.info(
