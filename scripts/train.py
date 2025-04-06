@@ -178,46 +178,46 @@ def main(cfg):
     stats.dump_stats(f"profile-{cfg.device}.stats")
 
     # ================== Evaluation and Plotting ==================
-    if not cfg.skip_final_eval:
-        # Field Breakdown
-        final_plots_dir = os.path.join(fields_plots_dir, "final")
-        os.makedirs(final_plots_dir, exist_ok=True)
-        idxs = np.random.randint(0, len(train_inputs), 100)
-        x = train_inputs[idxs]
-        y = train_targets[idxs]
-        for max_steps in [0, cfg.max_steps]:
-            for ignore_right in [0, 1]:
-                for plot_total in [False, True]:
-                    fig, axs = handler.fields_histogram(
-                        x, y, max_steps, ignore_right, plot_total
+    # Field Breakdown
+    final_plots_dir = os.path.join(fields_plots_dir, "final")
+    os.makedirs(final_plots_dir, exist_ok=True)
+    idxs = np.random.randint(0, len(train_inputs), 100)
+    x = train_inputs[idxs]
+    y = train_targets[idxs]
+    for max_steps in [0, cfg.max_steps]:
+        for ignore_right in [0, 1]:
+            for plot_total in [False, True]:
+                fig, axs = handler.fields_histogram(
+                    x, y, max_steps, ignore_right, plot_total
+                )
+                fig.suptitle(
+                    f"Field Breakdown at End of Training. Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
+                )
+                fig.tight_layout()
+                plt.savefig(
+                    os.path.join(
+                        final_plots_dir,
+                        f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
                     )
-                    fig.suptitle(
-                        f"Field Breakdown at End of Training. Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
-                    )
-                    fig.tight_layout()
-                    plt.savefig(
-                        os.path.join(
-                            final_plots_dir,
-                            f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
-                        )
-                    )
-                    plt.close(fig)
+                )
+                plt.close(fig)
 
-        # Evaluate final model and plot Accuracy
-        eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
-        logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
-        t2 = time.time()
-        logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
-        fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
-        plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
-        plt.close(fig)
-        eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
-        fig = plot_accuracy_history(
-            logs["train_acc_history"], logs["eval_acc_history"], eval_epochs
-        )
-        plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
-        plt.close(fig)
+    # Evaluate final model and plot Accuracy
+    eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
+    logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
+    t2 = time.time()
+    logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
+    fig = plot_accuracy_by_class_barplot(eval_metrics["accuracy_by_class"])
+    plt.savefig(os.path.join(output_dir, "eval_accuracy_by_class.png"))
+    plt.close(fig)
+    eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
+    fig = plot_accuracy_history(
+        logs["train_acc_history"], logs["eval_acc_history"], eval_epochs
+    )
+    plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
+    plt.close(fig)
 
+    if not cfg.skip_representations:
         # Representations
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
@@ -249,17 +249,17 @@ def main(cfg):
             plt.savefig(os.path.join(plot_dir, "avg_over_inputs.png"))
             plt.close(fig)
 
-        # Couplings
-        couplings_root_dir = os.path.join(output_dir, "couplings")
-        os.makedirs(couplings_root_dir, exist_ok=True)
-        figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1], bins=100)
-        for key, fig in figs.items():
-            fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
-            plt.close(fig)
-        figs = plot_couplings_distro_evolution(logs)
-        for key, fig in figs.items():
-            fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
-            plt.close(fig)
+    # Couplings
+    couplings_root_dir = os.path.join(output_dir, "couplings")
+    os.makedirs(couplings_root_dir, exist_ok=True)
+    figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1])
+    for key, fig in figs.items():
+        fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
+        plt.close(fig)
+    figs = plot_couplings_distro_evolution(logs)
+    for key, fig in figs.items():
+        fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
+        plt.close(fig)
 
     logging.info(
         "Best train accuracy: {:.2f}".format(np.max(logs["train_acc_history"]))
