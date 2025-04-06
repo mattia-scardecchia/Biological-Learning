@@ -7,6 +7,6 @@ multirun/
 data/
 slurm_logs/
 checkpoints/
-logs/
+lightning-logs/
 
 *.stats

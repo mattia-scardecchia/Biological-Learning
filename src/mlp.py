@@ -9,7 +9,7 @@ import torchmetrics
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-from src.data import get_balanced_dataset
+from src.data import get_balanced_dataset, prepare_mnist
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +251,50 @@ class DataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size)
+
+
+class MnistDataModule(pl.LightningDataModule):
+    """PyTorch Lightning data module for the balanced dataset"""
+
+    def __init__(
+        self,
+        dataset_config,
+        batch_size=32,
+        seed=42,
+    ):
+        super().__init__()
+        self.P = dataset_config.P
+        self.P_eval = dataset_config.P_eval
+        self.N = dataset_config.N
+        self.binarize = dataset_config.binarize
+        self.batch_size = batch_size
+        self.seed = seed
+
+        self.input_dim = dataset_config.N
+        self.num_classes = 10
+
+    def setup(self, stage=None):
+        """Load and prepare the data"""
+
+        train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
+            prepare_mnist(
+                self.P * 10,
+                self.P_eval * 10,
+                self.N,
+                self.binarize,
+                self.seed,
+                shuffle=True,
+            )
+        )
+
+        self.train_dataset = TensorDataset(train_inputs, train_targets)
+        self.val_dataset = TensorDataset(eval_inputs, eval_targets)
+
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.val_dataset, batch_size=self.batch_size)
 
 
 def get_callbacks(config):

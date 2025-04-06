@@ -8,25 +8,32 @@ seed: 42
 
 # Dataset parameters
 data:
-  N: 100  # Input dimensionality
-  P: 30   # Patterns per class (train + val + test)
-  C: 10   # Number of classes
-  p: 0.3  # Probability of flipping bits from prototypes
-  save_dir: "data/balanced_dataset"
-  load_if_available: true
-  dump: true
-  shuffle: true
+  dataset: "mnist"  # mnist, synthetic
+  synthetic:
+    N: 100  # Input dimensionality
+    P: 30   # Patterns per class (train + val + test)
+    C: 10   # Number of classes
+    p: 0.3  # Probability of flipping bits from prototypes
+    save_dir: "data/balanced_dataset"
+    load_if_available: true
+    dump: true
+    shuffle: true
+    val_split: 0.335  # Validation split ratio
+    test_split: 0.33  # Test split ratio
+  mnist:
+    P: 100       # patterns per class (train)
+    P_eval: 100  # patterns per class (val)
+    N: 1000
+    binarize: true
 
 # Model parameters
 model:
-  hidden_dims: [128, 64]  # Hidden layer dimensions
-  dropout_rate: 0.2       # Dropout probability
+  hidden_dims: []  # Hidden layer dimensions
+  dropout_rate: 0.0       # Dropout probability
 
 # Dataloader parameters
 dataloader:
   batch_size: 32
-  val_split: 0.335  # Validation split ratio
-  test_split: 0.33  # Test split ratio
 
 # Optimizer parameters
 optimizer:
@@ -36,7 +43,7 @@ optimizer:
 
 # Learning rate scheduler
 scheduler:
-  enabled: true
+  enabled: false
   name: "plateau"  # Options: step, cosine, plateau
   params:
     factor: 0.5
@@ -44,14 +51,14 @@ scheduler:
     
 # Training parameters
 trainer:
-  max_epochs: 10
+  max_epochs: 30
   accelerator: "auto"  # Options: cpu, gpu, auto
   devices: 1
   precision: 32  # Options: 32, 16, "bf16"
 
 # Checkpointing parameters
 checkpoint_callback:
-  enabled: true
+  enabled: false
   monitor: "val_loss"
   mode: "min"
   save_top_k: 1
@@ -69,5 +76,5 @@ early_stopping:
 
 # Logging parameters
 logging:
-  dir: "logs"
+  dir: "lightning-logs"
   log_every_n_steps: 10
