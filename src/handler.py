@@ -11,8 +11,11 @@ from src.classifier import Classifier
 
 
 class Handler:
-    def __init__(self, classifier: BatchMeIfUCan | Classifier):
+    def __init__(
+        self, classifier: BatchMeIfUCan | Classifier, spare_memory: bool = False
+    ):
         self.classifier = classifier
+        self.spare_memory = spare_memory
 
     def evaluate(
         self,
@@ -96,6 +99,9 @@ class Handler:
         # Accuracy
         self.logs[f"{type}_acc_history"].append(metrics["overall_accuracy"])
 
+        if self.spare_memory:
+            return
+
         # Representations
         eval_batch_size = len(metrics["fixed_points"])
         idxs = np.linspace(
@@ -175,24 +181,25 @@ class Handler:
 
             logging.info(message)  # NOTE: we log before training epoch
 
-        for type in ["train", "eval"]:
-            repr_tensor = torch.stack(
-                self.logs[f"{type}_representations"], dim=0
-            ).permute(1, 0, 2, 3)  # B, T, L, N
-            repr_dict = {
-                idx: repr_tensor[idx, :, :, :].cpu().numpy()
-                for idx in range(repr_tensor.shape[0])
-            }
-            self.logs[f"{type}_representations"] = repr_dict
+        if not self.spare_memory:
+            for type in ["train", "eval"]:
+                repr_tensor = torch.stack(
+                    self.logs[f"{type}_representations"], dim=0
+                ).permute(1, 0, 2, 3)  # B, T, L, N
+                repr_dict = {
+                    idx: repr_tensor[idx, :, :, :].cpu().numpy()
+                    for idx in range(repr_tensor.shape[0])
+                }
+                self.logs[f"{type}_representations"] = repr_dict
 
-        for key in [
-            "W_forth",  # T, C, N
-            "W_back",  # T, N, C
-            "internal_couplings",  # T, L, N, N
-            "left_couplings",  # T, L, N, N
-            "right_couplings",  # T, L, N, N
-        ]:
-            self.logs[key] = torch.stack(self.logs[key], dim=0).cpu().numpy()
+            for key in [
+                "W_forth",  # T, C, N
+                "W_back",  # T, N, C
+                "internal_couplings",  # T, L, N, N
+                "left_couplings",  # T, L, N, N
+                "right_couplings",  # T, L, N, N
+            ]:
+                self.logs[key] = torch.stack(self.logs[key], dim=0).cpu().numpy()
 
         return self.logs
 

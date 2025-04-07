@@ -37,3 +37,4 @@ weight_decay_W: 0.01
 # Evaluation
 eval_interval: 1  # epochs
 skip_representations: true
+spare_memory: false

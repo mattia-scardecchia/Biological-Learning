@@ -181,7 +181,7 @@ def main(cfg):
     }
     model_cls = BatchMeIfUCan if cfg.fc else Classifier
     model = model_cls(**model_kwargs)
-    handler = Handler(model)
+    handler = Handler(model, spare_memory=cfg.spare_memory)
 
     fields_plots_dir = os.path.join(output_dir, "fields")
     os.makedirs(fields_plots_dir, exist_ok=True)
@@ -253,23 +253,24 @@ def main(cfg):
     plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
     plt.close(fig)
 
-    if not cfg.skip_representations:
+    if not (cfg.skip_representations or cfg.spare_memory):
         # Representations
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
         plot_representation_similarity(logs, representations_root_dir, cfg)
 
     # Couplings
-    couplings_root_dir = os.path.join(output_dir, "couplings")
-    os.makedirs(couplings_root_dir, exist_ok=True)
-    figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1])
-    for key, fig in figs.items():
-        fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
-        plt.close(fig)
-    figs = plot_couplings_distro_evolution(logs)
-    for key, fig in figs.items():
-        fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
-        plt.close(fig)
+    if not (cfg.spare_memory):
+        couplings_root_dir = os.path.join(output_dir, "couplings")
+        os.makedirs(couplings_root_dir, exist_ok=True)
+        figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1])
+        for key, fig in figs.items():
+            fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
+            plt.close(fig)
+        figs = plot_couplings_distro_evolution(logs)
+        for key, fig in figs.items():
+            fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
+            plt.close(fig)
 
     logging.info(
         "Best train accuracy: {:.2f}".format(np.max(logs["train_acc_history"]))
