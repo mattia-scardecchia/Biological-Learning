@@ -295,6 +295,9 @@ class MnistDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size)
+    
+    def test_dataloader(self):
+        return self.val_dataloader()
 
 
 def get_callbacks(config):

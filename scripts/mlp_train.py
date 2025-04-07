@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 
@@ -5,6 +6,7 @@ import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig
 from pytorch_lightning.loggers import TensorBoardLogger
+from hydra.core.hydra_config import HydraConfig
 
 from src.mlp import DataModule, MLPClassifier, MnistDataModule, get_callbacks
 
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(config_path="../configs", config_name="mlp", version_base="1.3")
 def main(cfg: DictConfig):
+    output_dir = HydraConfig.get().runtime.output_dir
     pl.seed_everything(cfg.seed)
 
     # Data
@@ -72,14 +75,14 @@ def main(cfg: DictConfig):
     logger.info("Starting training...")
     trainer.fit(model, data_module)
 
-    # # Test model
-    # logger.info("Evaluating on test set...")
-    # test_results = trainer.test(model, data_module)
-    # logger.info(f"Test results: {test_results}")
+    # Test model
+    logger.info("Evaluating on eval set...")
+    eval_results = trainer.test(model, data_module)
+    logger.info(f"Eval results: {eval_results}")
 
-    # # Save test results alongside model
-    # with open(os.path.join(logger_dir, "test_results.json"), "w") as f:
-    #     json.dump(test_results, f, indent=4)
+    # Save test results alongside model
+    with open(os.path.join(logger_dir, "eval_results.json"), "w") as f:
+        json.dump(eval_results, f, indent=4)
 
     logger.info(f"Training completed. Model and logs saved to {trainer.log_dir}")
 
