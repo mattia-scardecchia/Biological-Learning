@@ -181,7 +181,7 @@ def main(cfg):
     }
     model_cls = BatchMeIfUCan if cfg.fc else Classifier
     model = model_cls(**model_kwargs)
-    handler = Handler(model, spare_memory=cfg.spare_memory)
+    handler = Handler(model, cfg.skip_representations, cfg.skip_couplings)
 
     fields_plots_dir = os.path.join(output_dir, "fields")
     os.makedirs(fields_plots_dir, exist_ok=True)
@@ -253,14 +253,14 @@ def main(cfg):
     plt.savefig(os.path.join(output_dir, "accuracy_history.png"))
     plt.close(fig)
 
-    if not (cfg.skip_representations or cfg.spare_memory):
+    if not cfg.skip_representations:
         # Representations
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
         plot_representation_similarity(logs, representations_root_dir, cfg)
 
     # Couplings
-    if not (cfg.spare_memory):
+    if not cfg.skip_couplings:
         couplings_root_dir = os.path.join(output_dir, "couplings")
         os.makedirs(couplings_root_dir, exist_ok=True)
         figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1])

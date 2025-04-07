@@ -12,10 +12,14 @@ from src.classifier import Classifier
 
 class Handler:
     def __init__(
-        self, classifier: BatchMeIfUCan | Classifier, spare_memory: bool = False
+        self,
+        classifier: BatchMeIfUCan | Classifier,
+        skip_representations: bool = False,
+        skip_couplings: bool = False,
     ):
         self.classifier = classifier
-        self.spare_memory = spare_memory
+        self.skip_representations = skip_representations
+        self.skip_couplings = skip_couplings
 
     def evaluate(
         self,
@@ -99,30 +103,33 @@ class Handler:
         # Accuracy
         self.logs[f"{type}_acc_history"].append(metrics["overall_accuracy"])
 
-        if self.spare_memory:
-            return
-
         # Representations
-        eval_batch_size = len(metrics["fixed_points"])
-        idxs = np.linspace(
-            0,
-            eval_batch_size,
-            min(self.classifier.C * 30, eval_batch_size),
-            endpoint=False,
-        ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
-        self.logs[f"{type}_representations"].append(
-            metrics["fixed_points"][idxs, :, :].clone()
-        )
+        if not self.skip_representations:
+            eval_batch_size = len(metrics["fixed_points"])
+            idxs = np.linspace(
+                0,
+                eval_batch_size,
+                min(self.classifier.C * 30, eval_batch_size),
+                endpoint=False,
+            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+            self.logs[f"{type}_representations"].append(
+                metrics["fixed_points"][idxs, :, :].clone()
+            )
 
         # Couplings
-        if type == "eval":
-            self.logs["W_forth"].append(self.classifier.W_forth.clone())
-            self.logs["W_back"].append(self.classifier.W_back.clone())
-            self.logs["internal_couplings"].append(
-                self.classifier.internal_couplings.clone()
-            )
-            self.logs["left_couplings"].append(self.classifier.left_couplings.clone())
-            self.logs["right_couplings"].append(self.classifier.right_couplings.clone())
+        if not self.skip_couplings:
+            if type == "eval":
+                self.logs["W_forth"].append(self.classifier.W_forth.clone())
+                self.logs["W_back"].append(self.classifier.W_back.clone())
+                self.logs["internal_couplings"].append(
+                    self.classifier.internal_couplings.clone()
+                )
+                self.logs["left_couplings"].append(
+                    self.classifier.left_couplings.clone()
+                )
+                self.logs["right_couplings"].append(
+                    self.classifier.right_couplings.clone()
+                )
 
     @torch.inference_mode()
     def train_loop(
@@ -181,7 +188,7 @@ class Handler:
 
             logging.info(message)  # NOTE: we log before training epoch
 
-        if not self.spare_memory:
+        if not self.skip_representations:
             for type in ["train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
@@ -192,6 +199,7 @@ class Handler:
                 }
                 self.logs[f"{type}_representations"] = repr_dict
 
+        if not self.skip_couplings:
             for key in [
                 "W_forth",  # T, C, N
                 "W_back",  # T, N, C
