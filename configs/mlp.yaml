@@ -8,7 +8,7 @@ seed: 42
 
 # Dataset parameters
 data:
-  dataset: "mnist"  # mnist, synthetic
+  dataset: "cifar"  # mnist, synthetic, cifar
   synthetic:
     N: 100  # Input dimensionality
     P: 30   # Patterns per class (train + val + test)
@@ -24,6 +24,11 @@ data:
     P: 100       # patterns per class (train)
     P_eval: 100  # patterns per class (val)
     N: 1000
+    binarize: true
+  cifar:
+    P: 100       # patterns per class (train)
+    P_eval: 100  # patterns per class (val)
+    N: 1024
     binarize: true
 
 # Model parameters

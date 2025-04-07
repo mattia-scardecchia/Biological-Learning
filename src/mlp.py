@@ -9,7 +9,7 @@ import torchmetrics
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
-from src.data import get_balanced_dataset, prepare_mnist
+from src.data import get_balanced_dataset, prepare_cifar, prepare_mnist
 
 logger = logging.getLogger(__name__)
 
@@ -253,16 +253,18 @@ class DataModule(pl.LightningDataModule):
         return DataLoader(self.test_dataset, batch_size=self.batch_size)
 
 
-class MnistDataModule(pl.LightningDataModule):
+class VisionDataModule(pl.LightningDataModule):
     """PyTorch Lightning data module for the balanced dataset"""
 
     def __init__(
         self,
+        dataset,
         dataset_config,
         batch_size=32,
         seed=42,
     ):
         super().__init__()
+        self.dataset = dataset
         self.P = dataset_config.P
         self.P_eval = dataset_config.P_eval
         self.N = dataset_config.N
@@ -271,13 +273,20 @@ class MnistDataModule(pl.LightningDataModule):
         self.seed = seed
 
         self.input_dim = dataset_config.N
+        assert self.dataset in ["mnist", "cifar"]
         self.num_classes = 10
 
     def setup(self, stage=None):
         """Load and prepare the data"""
 
-        train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
-            prepare_mnist(
+        if self.dataset == "mnist":
+            (
+                train_inputs,
+                train_targets,
+                eval_inputs,
+                eval_targets,
+                projection_matrix,
+            ) = prepare_mnist(
                 self.P * 10,
                 self.P_eval * 10,
                 self.N,
@@ -285,7 +294,24 @@ class MnistDataModule(pl.LightningDataModule):
                 self.seed,
                 shuffle=True,
             )
-        )
+        elif self.dataset == "cifar":
+            (
+                train_inputs,
+                train_targets,
+                eval_inputs,
+                eval_targets,
+                median,
+            ) = prepare_cifar(
+                self.P * 10,
+                self.P_eval * 10,
+                self.N,
+                self.binarize,
+                self.seed,
+                cifar10=True,
+                shuffle=True,
+            )
+        else:
+            raise ValueError(f"Unsupported dataset: {self.dataset}")
 
         self.train_dataset = TensorDataset(train_inputs, train_targets)
         self.val_dataset = TensorDataset(eval_inputs, eval_targets)
@@ -295,7 +321,7 @@ class MnistDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size)
-    
+
     def test_dataloader(self):
         return self.val_dataloader()
 

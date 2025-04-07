@@ -4,11 +4,11 @@ import os
 
 import hydra
 import pytorch_lightning as pl
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 from pytorch_lightning.loggers import TensorBoardLogger
-from hydra.core.hydra_config import HydraConfig
 
-from src.mlp import DataModule, MLPClassifier, MnistDataModule, get_callbacks
+from src.mlp import DataModule, MLPClassifier, VisionDataModule, get_callbacks
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -29,9 +29,13 @@ def main(cfg: DictConfig):
             val_split=cfg.data.synthetic.val_split,
             test_split=cfg.data.synthetic.test_split,
         )
-    elif cfg.data.dataset == "mnist":
-        data_module = MnistDataModule(
-            cfg.data.mnist,
+    elif cfg.data.dataset in ["mnist", "cifar"]:
+        dataset_config = (
+            cfg.data.mnist if cfg.data.dataset == "mnist" else cfg.data.cifar
+        )
+        data_module = VisionDataModule(
+            cfg.data.dataset,
+            dataset_config,
             cfg.dataloader.batch_size,
             cfg.seed,
         )
@@ -81,7 +85,7 @@ def main(cfg: DictConfig):
     logger.info(f"Eval results: {eval_results}")
 
     # Save test results alongside model
-    with open(os.path.join(logger_dir, "eval_results.json"), "w") as f:
+    with open(os.path.join(output_dir, "eval_results.json"), "w") as f:
         json.dump(eval_results, f, indent=4)
 
     logger.info(f"Training completed. Model and logs saved to {trainer.log_dir}")
