@@ -300,6 +300,7 @@ class VisionDataModule(pl.LightningDataModule):
                 train_targets,
                 eval_inputs,
                 eval_targets,
+                projection_matrix,
                 median,
             ) = prepare_cifar(
                 self.P * 10,

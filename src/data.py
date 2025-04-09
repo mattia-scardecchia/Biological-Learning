@@ -183,7 +183,7 @@ def prepare_cifar(
     transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Grayscale(num_output_channels=1),
+            # transforms.Grayscale(num_output_channels=1),
             transforms.Lambda(lambda x: x.view(-1)),
         ]
     )
@@ -232,7 +232,11 @@ def prepare_cifar(
     train_labels = torch.eye(num_classes)[train_labels]
     eval_labels = torch.eye(num_classes)[eval_labels]
 
-    # Binarize or normalize the data
+    # Random linear projection, and Binarize/Normalize the data
+    projection_matrix = torch.randn(3072, N)
+    # projection_matrix = torch.eye(3072, 3072)
+    train_images = train_images @ projection_matrix
+    eval_images = eval_images @ projection_matrix
     if binarize:
         median = train_images.median().item()
         train_images = torch.sign(train_images - median)
@@ -251,5 +255,6 @@ def prepare_cifar(
         train_labels,
         eval_images,
         eval_labels,
+        projection_matrix,
         median,
     )
