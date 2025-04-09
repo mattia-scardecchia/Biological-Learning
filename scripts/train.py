@@ -27,8 +27,12 @@ from src.utils import (
 
 def plot_representation_similarity(logs, save_dir, cfg):
     for representations, dirname in zip(
-        [logs["eval_representations"], logs["train_representations"]],
-        ["eval", "train"],
+        [
+            logs["update_representations"],
+            logs["eval_representations"],
+            logs["train_representations"],
+        ],
+        ["update", "eval", "train"],
     ):
         plot_dir = os.path.join(save_dir, dirname)
         os.makedirs(plot_dir, exist_ok=True)
@@ -116,7 +120,14 @@ def get_data(cfg):
         )
     elif cfg.data.dataset == "cifar":
         C = 10 if cfg.data.cifar.cifar10 else 100
-        train_inputs, train_targets, eval_inputs, eval_targets, median = prepare_cifar(
+        (
+            train_inputs,
+            train_targets,
+            eval_inputs,
+            eval_targets,
+            projection_matrix,
+            median,
+        ) = prepare_cifar(
             cfg.data.P * C,
             cfg.data.P_eval * C,
             cfg.N,
@@ -279,4 +290,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
+    # with torch.mps.profiler.profile(mode="interval", wait_until_completed=False):
     main()

@@ -66,8 +66,9 @@ class Handler:
         metrics = defaultdict(list)
         num_samples = inputs.shape[0]
         idxs_perm = torch.randperm(num_samples, generator=self.classifier.cpu_generator)
-        for i in range(0, num_samples - batch_size + 1, batch_size):
-            batch_idxs = idxs_perm[i : i + batch_size]
+        batch_idx = 0
+        while batch_idx < num_samples - batch_size + 1:
+            batch_idxs = idxs_perm[batch_idx : batch_idx + batch_size]
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
             out = self.classifier.train_step(x, y, max_steps)
@@ -76,6 +77,8 @@ class Handler:
             metrics["readout_updates"].append(out["readout_updates"])
             metrics["hidden_unsat"].append(out["hidden_unsat"])
             metrics["readout_unsat"].append(out["readout_unsat"])
+            metrics["update_states"].append(out["update_states"])
+            batch_idx += batch_size
         for key in ["hidden_updates", "hidden_unsat"]:
             metrics[key] = torch.stack(metrics[key]).mean(
                 dim=(0, 1, 3), dtype=torch.float32
@@ -84,6 +87,9 @@ class Handler:
             metrics[key] = torch.stack(metrics[key]).mean(
                 dim=(0, 1, 2), dtype=torch.float32
             )
+        for key in ["update_states"]:
+            inverse_idxs_perm = torch.argsort(idxs_perm[:batch_idx])
+            metrics[key] = torch.cat(metrics[key], dim=0)[inverse_idxs_perm, ...]
         return metrics
 
     def flush_logs(self):
@@ -92,6 +98,7 @@ class Handler:
             "eval_acc_history": [],
             "train_representations": [],
             "eval_representations": [],
+            "update_representations": [],
             "W_forth": [],
             "W_back": [],
             "internal_couplings": [],
@@ -100,6 +107,20 @@ class Handler:
         }
 
     def log(self, metrics, type):
+        # Fixed points used for training
+        if type == "update":
+            eval_batch_size = len(metrics["update_states"])
+            idxs = np.linspace(
+                0,
+                eval_batch_size,
+                min(self.classifier.C * 30, eval_batch_size),
+                endpoint=False,
+            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+            self.logs["update_representations"].append(
+                metrics["update_states"][idxs, :, :].clone()
+            )
+            return
+
         # Accuracy
         self.logs[f"{type}_acc_history"].append(metrics["overall_accuracy"])
 
@@ -160,6 +181,13 @@ class Handler:
             eval_interval = num_epochs + 1  # never evaluate
         self.flush_logs()
 
+        # log_dir = "torch-profiler-logs"
+        # with torch.profiler.profile(
+        #     activities=[torch.profiler.ProfilerActivity.CPU],
+        #     on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir),
+        #     record_shapes=True,
+        #     profile_memory=True,
+        # ) as prof:
         for epoch in range(num_epochs):
             train_metrics = self.evaluate(inputs, targets, max_steps)
             self.log(train_metrics, type="train")
@@ -169,6 +197,7 @@ class Handler:
                 self.log(eval_metrics, type="eval")
 
             out = self.train_epoch(inputs, targets, max_steps, batch_size)
+            self.log(out, type="update")
 
             message = (
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
@@ -189,7 +218,7 @@ class Handler:
             logging.info(message)  # NOTE: we log before training epoch
 
         if not self.skip_representations:
-            for type in ["train", "eval"]:
+            for type in ["update", "train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
                 ).permute(1, 0, 2, 3)  # B, T, L, N

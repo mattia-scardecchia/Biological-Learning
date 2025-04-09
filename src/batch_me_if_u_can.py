@@ -380,6 +380,7 @@ class BatchMeIfUCan:
             "readout_updates": made_update[:, -1, : self.C],
             "hidden_unsat": unsat[:, :-1, :],
             "readout_unsat": unsat[:, -1, : self.C],
+            "update_states": final_state[:, 1:-2, :],
         }
 
     def inference(

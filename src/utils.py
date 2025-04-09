@@ -123,7 +123,9 @@ def plot_representation_similarity_among_inputs(representations, epoch, layer_sk
         sns.heatmap(
             sim_matrix, ax=ax, cmap="seismic", vmin=0, vmax=1, cbar=(ax == axes[-1])
         )  # show colorbar only on last subplot
-        ax.set_title(f"Epoch {epoch}, Layer {layer}")
+        non_diagonal_mask = ~np.eye(num_inputs, dtype=bool)
+        avg_sim_off_diagonal = np.mean(sim_matrix[non_diagonal_mask])
+        ax.set_title(f"Epoch {epoch}, Layer {layer}. Avg: {avg_sim_off_diagonal:.2f}")
         ax.set_xlabel("Input")
         ax.set_ylabel("Input")
 

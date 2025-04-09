@@ -311,7 +311,7 @@ class Classifier:
             new_readout = self.sign(readout_field)
             states, readout = new_states, new_readout
         hidden_unsat, readout_unsat = self.fraction_unsat_neurons(states, readout, x, y)
-        return (states, readout), steps, (hidden_unsat.permute(1, 0, 2), readout_unsat)
+        return (states, readout), steps, (hidden_unsat, readout_unsat)
 
     # def relax(
     #     self,
@@ -396,7 +396,7 @@ class Classifier:
             + delta_W_forth
         )
 
-        return is_unstable_hidden.permute(1, 0, 2), is_unstable_readout
+        return is_unstable_hidden, is_unstable_readout
 
     def train_step(
         self,
@@ -419,10 +419,11 @@ class Classifier:
         )
         return {
             "sweeps": num_sweeps,
-            "hidden_updates": hidden_updates,  # B, L, N
+            "hidden_updates": hidden_updates.permute(1, 0, 2),  # B, L, N
             "readout_updates": readout_updates,  # B, C
-            "hidden_unsat": hidden_unsat,  # B, L, N
+            "hidden_unsat": hidden_unsat.permute(1, 0, 2),  # B, L, N
             "readout_unsat": readout_unsat,  # B, C
+            "update_states": final_states.permute(1, 0, 2),  # B, L, N
         }
 
     def inference(self, x: torch.Tensor, max_steps: int):
