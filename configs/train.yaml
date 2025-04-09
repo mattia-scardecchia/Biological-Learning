@@ -3,38 +3,41 @@ defaults:
   - _self_
   - /data@_here_
 
+# NOTE: full lists take precedence (e.g. for lr, weight_decay, threshold, lambdas, etc.)
+
 # Experiment
 name: 'prova'
-seed: 123
+seed: 73
 device: 'cpu'
 
 # Network and Relaxation
 N: 1000
 num_layers: 5
 J_D: 0.2
-max_steps: 5                                  # full sweeps over the network (relaxation)
+max_steps: 10                                  # full sweeps over the network (relaxation)
+init_mode: "zeros"                            # "input", "zeros"
 fc: false
-# lambda_left: [0, 2.0, 2.0, 2.0, 2.0, 1.0]     # first is lambda_x, last affects the readout layer
-# lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 4.0]  # last is lambda_y, last but one affects the readout layer
-lambda_x: 0.0
-lambda_y: 4.0
-lambda_l: 2.0
-lambda_r: 4.0
+# lambda_left: [6.0, 4.0, 4.0, 4.0, 4.0, 1.0]     # first is lambda_x, last affects the readout layer
+# lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 6.0]  # last is lambda_y, last but one affects the readout layer
+lambda_x: 6.0
+lambda_y: 6.0
+lambda_l: 4.0
+lambda_r: 2.0
 
 # Perceptron Rule
 num_epochs: 10
 batch_size: 16
 # lr: [0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 0.01]                     # scaled by typical weight size. last two are for W_back and W_forth
-threshold: [1.0, 2.5, 2.5, 2.5, 2.5, 2.5]                     # perceptron rule. last is for readout layer
+threshold: [1.75, 1.75, 1.75, 1.75, 3.0, 3.0]                     # perceptron rule. last is for readout layer
 # weight_decay: [0.01, 0.001, 0.001, 0.001, 0.001, 0.0, 0.0]   # scaled by learning rate. last two are for W_back and W_forth
 lr_J: 0.1
-lr_W: 0.01
-threshold_hidden: 2.5
-threshold_readout: 2.5
+lr_W: 0.02
+threshold_hidden: 1.75
+threshold_readout: 3.0
 weight_decay_J: 0.1
 weight_decay_W: 0.01
 
 # Evaluation
 eval_interval: 1  # epochs
-skip_representations: true
+skip_representations: false
 skip_couplings: false

@@ -73,6 +73,7 @@ class BatchMeIfUCan:
         lr: torch.Tensor,
         threshold: torch.Tensor,
         weight_decay: torch.Tensor,
+        init_mode: str,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -111,6 +112,7 @@ class BatchMeIfUCan:
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
         self.ignore_right_mask = self.build_ignore_right_mask()
+        self.init_mode = init_mode
 
         logging.info(f"Initialized {self} on device: {self.device}")
         logging.info(
@@ -285,6 +287,7 @@ class BatchMeIfUCan:
         self,
         x: torch.Tensor,
         y: torch.Tensor,
+        mode: str,
     ):
         """
         :param x: shape (batch_size, N)
@@ -292,7 +295,14 @@ class BatchMeIfUCan:
         :return: shape (batch_size, L+3, N)
         """
         batch_size = x.shape[0]
-        y_hat = sample_state(self.C, batch_size, self.device, self.generator)
+        if mode == "input":
+            neurons = x.unsqueeze(1).repeat(1, self.L, 1)
+            y_hat = sample_state(self.C, batch_size, self.device, self.generator)
+        elif mode == "zeros":
+            neurons = torch.zeros((batch_size, self.L, self.N), device=self.device)
+            y_hat = torch.zeros((batch_size, self.C), device=self.device)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
         y_hat = F.pad(
             y_hat,
             (0, self.N - self.C, 0, 0),
@@ -307,7 +317,8 @@ class BatchMeIfUCan:
         )  # (B, C) -> (B, N)
         state = torch.cat(
             [
-                x.unsqueeze(1).repeat(1, self.L + 1, 1),
+                x.unsqueeze(1),
+                neurons,
                 y_hat.unsqueeze(1),
                 y_padded.unsqueeze(1),
             ],
@@ -371,7 +382,7 @@ class BatchMeIfUCan:
         y: torch.Tensor,
         max_sweeps: int,
     ):
-        state = self.initialize_state(x, y)
+        state = self.initialize_state(x, y, self.init_mode)
         final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=0)
         made_update = self.perceptron_rule(final_state)
         return {
@@ -389,7 +400,7 @@ class BatchMeIfUCan:
         max_sweeps: int,
     ):
         state = self.initialize_state(
-            x, torch.zeros((x.shape[0], self.C), device=self.device)
+            x, torch.zeros((x.shape[0], self.C), device=self.device), self.init_mode
         )
         final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.N].T

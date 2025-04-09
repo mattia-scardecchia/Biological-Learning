@@ -16,10 +16,12 @@ class Handler:
         classifier: BatchMeIfUCan | Classifier,
         skip_representations: bool = False,
         skip_couplings: bool = False,
+        init_mode: str = "input",
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
         self.skip_couplings = skip_couplings
+        self.init_mode = init_mode
 
     def evaluate(
         self,
@@ -66,9 +68,9 @@ class Handler:
         metrics = defaultdict(list)
         num_samples = inputs.shape[0]
         idxs_perm = torch.randperm(num_samples, generator=self.classifier.cpu_generator)
-        batch_idx = 0
-        while batch_idx < num_samples - batch_size + 1:
-            batch_idxs = idxs_perm[batch_idx : batch_idx + batch_size]
+        input_idx = 0
+        while input_idx < num_samples - batch_size + 1:
+            batch_idxs = idxs_perm[input_idx : input_idx + batch_size]
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
             out = self.classifier.train_step(x, y, max_steps)
@@ -77,8 +79,13 @@ class Handler:
             metrics["readout_updates"].append(out["readout_updates"])
             metrics["hidden_unsat"].append(out["hidden_unsat"])
             metrics["readout_unsat"].append(out["readout_unsat"])
-            metrics["update_states"].append(out["update_states"])
-            batch_idx += batch_size
+            metrics["similarity_to_input"].append(
+                torch.einsum("bln,bn->l", out["update_states"], x)
+                / (self.classifier.N * batch_size)
+            )
+            if not self.skip_representations:
+                metrics["update_states"].append(out["update_states"])
+            input_idx += batch_size
         for key in ["hidden_updates", "hidden_unsat"]:
             metrics[key] = torch.stack(metrics[key]).mean(
                 dim=(0, 1, 3), dtype=torch.float32
@@ -87,9 +94,14 @@ class Handler:
             metrics[key] = torch.stack(metrics[key]).mean(
                 dim=(0, 1, 2), dtype=torch.float32
             )
-        for key in ["update_states"]:
-            inverse_idxs_perm = torch.argsort(idxs_perm[:batch_idx])
-            metrics[key] = torch.cat(metrics[key], dim=0)[inverse_idxs_perm, ...]
+        metrics["similarity_to_input"] = (
+            torch.stack(metrics["similarity_to_input"], dim=0).mean(dim=0) + 1
+        ) / 2
+        if not self.skip_representations:
+            inverse_idxs_perm = torch.argsort(idxs_perm[:input_idx])
+            metrics["update_states"] = torch.cat(metrics["update_states"], dim=0)[
+                inverse_idxs_perm, ...
+            ]
         return metrics
 
     def flush_logs(self):
@@ -109,16 +121,17 @@ class Handler:
     def log(self, metrics, type):
         # Fixed points used for training
         if type == "update":
-            eval_batch_size = len(metrics["update_states"])
-            idxs = np.linspace(
-                0,
-                eval_batch_size,
-                min(self.classifier.C * 30, eval_batch_size),
-                endpoint=False,
-            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
-            self.logs["update_representations"].append(
-                metrics["update_states"][idxs, :, :].clone()
-            )
+            if not self.skip_representations:
+                eval_batch_size = len(metrics["update_states"])
+                idxs = np.linspace(
+                    0,
+                    eval_batch_size,
+                    min(self.classifier.C * 30, eval_batch_size),
+                    endpoint=False,
+                ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+                self.logs["update_representations"].append(
+                    metrics["update_states"][idxs, :, :].clone()
+                )
             return
 
         # Accuracy
@@ -207,6 +220,7 @@ class Handler:
                 "Perceptron Rule Updates: "
                 f"{', '.join([format(x, '.2f') for x in (out['hidden_updates'].tolist() + [float(out['readout_updates'])])])}\n"
                 "Similarity of Representations to Inputs: \n"
+                f"   Update patterns:      {', '.join([format(x, '.2f') for x in out['similarity_to_input'].tolist()])}\n"
                 f"   Train patterns:       {', '.join([format(x, '.2f') for x in train_metrics['similarity_to_input'].tolist()])}\n"
             )
             if (epoch + 1) % eval_interval == 0:
@@ -241,7 +255,7 @@ class Handler:
         return self.logs
 
     def fields_histogram(self, x, y, max_steps=0, ignore_right=0, plot_total=False):
-        state = self.classifier.initialize_state(x, y)
+        state = self.classifier.initialize_state(x, y, self.init_mode)
         if max_steps:
             kwargs = {"x": x, "y": y} if isinstance(self.classifier, Classifier) else {}
             state, _, _ = self.classifier.relax(

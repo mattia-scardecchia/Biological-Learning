@@ -32,6 +32,7 @@ class Classifier:
         lr: torch.Tensor,
         threshold: torch.Tensor,
         weight_decay: torch.Tensor,
+        init_mode: str,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -72,6 +73,7 @@ class Classifier:
         self.lr = lr
         self.threshold = threshold
         self.weight_decay = weight_decay
+        self.init_mode = init_mode
 
         logging.info(f"Initialized {self} on device: {self.device}")
         logging.info(
@@ -133,15 +135,26 @@ class Classifier:
         # )
         # return weights
 
-    def initialize_state(self, x: torch.Tensor, y: Optional[torch.Tensor]):
+    def initialize_state(
+        self, x: torch.Tensor, y: Optional[torch.Tensor], mode="input"
+    ):
         """
         Initializes the state of the neurons within each layer, and
         in the readout layer
         :param y: only for compatibility with the handler.
         """
         batch_size = x.shape[0]
-        states = [x.clone() for _ in range(self.L)]
-        readout = initialize_layer(batch_size, self.C, self.device, self.generator)
+        if mode == "input":
+            states = [x.clone() for _ in range(self.L)]
+            readout = initialize_layer(batch_size, self.C, self.device, self.generator)
+        elif mode == "zeros":
+            states = [
+                torch.zeros((batch_size, self.N), device=self.device)
+                for _ in range(self.L)
+            ]
+            readout = torch.zeros((batch_size, self.C), device=self.device)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
         return torch.stack(states), readout
 
         # assert x is not None
@@ -404,7 +417,7 @@ class Classifier:
         y: torch.Tensor,
         max_steps: int,
     ):
-        states, readout = self.initialize_state(x, y)
+        states, readout = self.initialize_state(x, y, mode=self.init_mode)
         (final_states, final_readout), num_sweeps, (hidden_unsat, readout_unsat) = (
             self.relax((states, readout), x, y, max_steps)
         )
@@ -427,7 +440,7 @@ class Classifier:
         }
 
     def inference(self, x: torch.Tensor, max_steps: int):
-        initial_states, initial_readout = self.initialize_state(x, y=None)
+        initial_states, initial_readout = self.initialize_state(x, None, self.init_mode)
         (states, readout), _, _ = self.relax(
             (initial_states, initial_readout),
             x,
