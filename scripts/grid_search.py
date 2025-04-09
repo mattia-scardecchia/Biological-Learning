@@ -81,6 +81,7 @@ def main(cfg):
             "lr": torch.tensor(lr),
             "threshold": torch.tensor(threshold),
             "weight_decay": torch.tensor(weight_decay),
+            "init_mode": cfg.init_mode,
         }
         model_cls = BatchMeIfUCan if cfg.fc else Classifier
         model = model_cls(**model_kwargs)
