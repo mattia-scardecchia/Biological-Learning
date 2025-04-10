@@ -194,7 +194,11 @@ def main(cfg):
     model_cls = BatchMeIfUCan if cfg.fc else Classifier
     model = model_cls(**model_kwargs)
     handler = Handler(
-        model, cfg.skip_representations, cfg.skip_couplings, init_mode=cfg.init_mode
+        model,
+        cfg.init_mode,
+        cfg.skip_representations,
+        cfg.skip_couplings,
+        output_dir,
     )
 
     fields_plots_dir = os.path.join(output_dir, "fields")

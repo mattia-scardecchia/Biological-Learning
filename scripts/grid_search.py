@@ -85,7 +85,13 @@ def main(cfg):
         }
         model_cls = BatchMeIfUCan if cfg.fc else Classifier
         model = model_cls(**model_kwargs)
-        handler = Handler(model, True, True)
+        handler = Handler(
+            model,
+            cfg.init_mode,
+            True,
+            True,
+            output_dir,
+        )
 
         logs = handler.train_loop(
             cfg.num_epochs,

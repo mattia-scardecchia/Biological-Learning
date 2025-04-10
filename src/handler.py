@@ -14,14 +14,19 @@ class Handler:
     def __init__(
         self,
         classifier: BatchMeIfUCan | Classifier,
-        skip_representations: bool = False,
-        skip_couplings: bool = False,
-        init_mode: str = "input",
+        init_mode: str,
+        skip_representations: bool,
+        skip_couplings: bool,
+        output_dir: str,
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
         self.skip_couplings = skip_couplings
         self.init_mode = init_mode
+        self.flush_logs()
+
+        self.output_dir = output_dir
+        self.memory_usage_file = f"{self.output_dir}/memory_usage.txt"
 
     def evaluate(
         self,
@@ -214,7 +219,17 @@ class Handler:
         #     record_shapes=True,
         #     profile_memory=True,
         # ) as prof:
+
+        # tracemalloc.start()
         for epoch in range(num_epochs):
+            # snapshot = tracemalloc.take_snapshot()
+            # top_stats = snapshot.statistics("lineno")
+            # message = f"Top 10 memory usage at epoch {epoch}:\n"
+            # for stat in top_stats[:10]:
+            #     message += f"{stat}\n"
+            # with open(self.memory_usage_file, "a") as f:
+            #     f.write(message)
+
             train_metrics = self.evaluate(inputs, targets, max_steps)
             self.log(train_metrics, type="train")
 
