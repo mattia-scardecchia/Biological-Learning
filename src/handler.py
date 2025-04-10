@@ -29,9 +29,22 @@ class Handler:
         y: torch.Tensor,
         max_steps: int,
     ):
-        logits, states, readout = self.classifier.inference(x, max_steps)
-        predictions = torch.argmax(logits, dim=1)
-        ground_truth = torch.argmax(y, dim=1)
+        logits, states, readout = [], [], []
+        num_samples = x.shape[0]
+        batch_size = min(1024, num_samples)
+        for i in range(0, num_samples, batch_size):
+            x_batch = x[i : i + batch_size]
+            logits_batch, states_batch, readout_batch = self.classifier.inference(
+                x_batch, max_steps
+            )
+            logits.append(logits_batch)
+            states.append(states_batch)
+            readout.append(readout_batch)
+        logits = torch.cat(logits, dim=0)  # B, C
+        states = torch.cat(states, dim=0)  # B, L, N
+        readout = torch.cat(readout, dim=0)  # B, C
+        predictions = torch.argmax(logits, dim=1)  # B,
+        ground_truth = torch.argmax(y, dim=1)  # B,
         accuracy = (predictions == ground_truth).float().mean().item()
         accuracy_by_class = {}
         for cls in range(self.classifier.C):
