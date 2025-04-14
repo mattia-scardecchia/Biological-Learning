@@ -7,9 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from torch.utils.data import DataLoader, TensorDataset, random_split
-
-from src.data import get_balanced_dataset, prepare_cifar, prepare_mnist
+from torch.utils.data import DataLoader, TensorDataset
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +51,7 @@ class MLPClassifier(pl.LightningModule):
         prev_dim = input_dim
 
         for i, hidden_dim in enumerate(hidden_dims):
+            nn.LayerNorm(prev_dim)
             layers.append(nn.Linear(prev_dim, hidden_dim))
             layers.append(nn.ReLU())
             layers.append(nn.Dropout(dropout_rate))
@@ -192,130 +191,22 @@ class MLPClassifier(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
-class DataModule(pl.LightningDataModule):
-    """PyTorch Lightning data module for the balanced dataset"""
-
-    def __init__(self, dataset_config, batch_size=32, val_split=0.2, test_split=0.1):
-        super().__init__()
-        self.dataset_config = dataset_config
-        self.batch_size = batch_size
-        self.val_split = val_split
-        self.test_split = test_split
-
-    def setup(self, stage=None):
-        """Load and prepare the data"""
-        logger.info(f"Loading dataset with params: {self.dataset_config}")
-
-        # Get dataset using the provided function
-        inputs, targets, metadata, _ = get_balanced_dataset(
-            N=self.dataset_config.N,
-            P=self.dataset_config.P,
-            C=self.dataset_config.C,
-            p=self.dataset_config.p,
-            save_dir=self.dataset_config.save_dir,
-            load_if_available=self.dataset_config.load_if_available,
-            dump=self.dataset_config.dump,
-            shuffle=self.dataset_config.shuffle,
-        )
-
-        # Convert to torch tensors
-        inputs_tensor = torch.tensor(inputs, dtype=torch.float32)
-        targets_tensor = torch.tensor(targets, dtype=torch.float32)
-
-        # Create dataset
-        dataset = TensorDataset(inputs_tensor, targets_tensor)
-
-        # Split into train, validation, and test sets
-        dataset_size = len(dataset)
-        val_size = int(dataset_size * self.val_split)
-        test_size = int(dataset_size * self.test_split)
-        train_size = dataset_size - val_size - test_size
-
-        logger.info(
-            f"Dataset split: train={train_size}, val={val_size}, test={test_size}"
-        )
-
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            dataset, [train_size, val_size, test_size]
-        )
-
-        # Store dataset metadata
-        self.input_dim = metadata["N"]
-        self.num_classes = metadata["C"]
-
-    def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
-
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size)
-
-    def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size)
-
-
-class VisionDataModule(pl.LightningDataModule):
-    """PyTorch Lightning data module for the balanced dataset"""
-
+class SimpleDataModule(pl.LightningDataModule):
     def __init__(
-        self,
-        dataset,
-        dataset_config,
-        batch_size=32,
-        seed=42,
+        self, train_inputs, train_targets, eval_inputs, eval_targets, batch_size
     ):
         super().__init__()
-        self.dataset = dataset
-        self.P = dataset_config.P
-        self.P_eval = dataset_config.P_eval
-        self.N = dataset_config.N
-        self.binarize = dataset_config.binarize
+        self.train_inputs = train_inputs
+        self.train_targets = train_targets
+        self.eval_inputs = eval_inputs
+        self.eval_targets = eval_targets
         self.batch_size = batch_size
-        self.seed = seed
-
-        self.input_dim = dataset_config.N
-        assert self.dataset in ["mnist", "cifar"]
-        self.num_classes = 10
 
     def setup(self, stage=None):
-        """Load and prepare the data"""
-
-        if self.dataset == "mnist":
-            (
-                train_inputs,
-                train_targets,
-                eval_inputs,
-                eval_targets,
-                projection_matrix,
-            ) = prepare_mnist(
-                self.P * 10,
-                self.P_eval * 10,
-                self.N,
-                self.binarize,
-                self.seed,
-                shuffle=True,
-            )
-        elif self.dataset == "cifar":
-            (
-                train_inputs,
-                train_targets,
-                eval_inputs,
-                eval_targets,
-                projection_matrix,
-                median,
-            ) = prepare_cifar(
-                self.P * 10,
-                self.P_eval * 10,
-                self.N,
-                self.binarize,
-                self.seed,
-                cifar10=True,
-                shuffle=True,
-            )
-        else:
-            raise ValueError(f"Unsupported dataset: {self.dataset}")
-
-        self.train_dataset = TensorDataset(train_inputs, train_targets)
-        self.val_dataset = TensorDataset(eval_inputs, eval_targets)
+        self.train_dataset = TensorDataset(self.train_inputs, self.train_targets)
+        self.val_dataset = TensorDataset(self.eval_inputs, self.eval_targets)
+        self.input_dim = self.train_inputs.shape[1]
+        self.num_classes = self.train_targets.shape[1]
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)

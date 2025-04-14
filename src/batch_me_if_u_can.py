@@ -70,10 +70,14 @@ class BatchMeIfUCan:
         J_D: float,
         lambda_left: list[float],
         lambda_right: list[float],
+        lambda_internal: float,
+        lambda_fc: float,
         lr: torch.Tensor,
         threshold: torch.Tensor,
         weight_decay: torch.Tensor,
         init_mode: str,
+        fc_left: bool,
+        fc_right: bool,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -95,6 +99,10 @@ class BatchMeIfUCan:
         self.lambda_left = torch.tensor(lambda_left, device=device)
         self.lambda_right = torch.tensor(lambda_right, device=device)
         self.J_D = torch.tensor(J_D, device=device)
+        self.fc_left = fc_left
+        self.fc_right = fc_right
+        self.lambda_internal = torch.tensor(lambda_internal, device=device)
+        self.lambda_fc = torch.tensor(lambda_fc, device=device)
 
         self.root_N = torch.sqrt(torch.tensor(N, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -106,8 +114,10 @@ class BatchMeIfUCan:
             self.generator.manual_seed(seed)
             self.cpu_generator.manual_seed(seed)
 
-        self.couplings = self.initialize_couplings(ferromagnetic=True)  # L+1, N, 3N
-        self.is_learnable = self.build_is_learnable_mask(learn_cross_couplings=False)
+        self.couplings = self.initialize_couplings(
+            fc_left=fc_left, fc_right=fc_right
+        )  # L+1, N, 3N
+        self.is_learnable = self.build_is_learnable_mask(fc_left, fc_right)
         self.lr = self.build_lr_tensor(lr)
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
@@ -128,7 +138,7 @@ class BatchMeIfUCan:
             f"weight_decay={weight_decay}\n"
         )
 
-    def initialize_couplings(self, ferromagnetic: bool = False):
+    def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
 
         # First Layer
@@ -137,15 +147,17 @@ class BatchMeIfUCan:
         )
         couplings_buffer.append(
             sample_couplings(self.N, self.device, self.generator, self.J_D)
+            * self.lambda_internal
         )
         couplings_buffer.append(
             sample_couplings(
                 self.N,
                 self.device,
                 self.generator,
-                self.lambda_right[0],
-                ferromagnetic,
+                self.lambda_right[0] / self.lambda_fc,
+                not fc_right,
             )
+            * self.lambda_fc
         )
 
         # Middle Layers
@@ -155,21 +167,24 @@ class BatchMeIfUCan:
                     self.N,
                     self.device,
                     self.generator,
-                    self.lambda_left[idx],
-                    ferromagnetic,
+                    self.lambda_left[idx] / self.lambda_fc,
+                    not fc_left,
                 )
+                * self.lambda_fc
             )
             couplings_buffer.append(
                 sample_couplings(self.N, self.device, self.generator, self.J_D)
+                * self.lambda_internal
             )
             couplings_buffer.append(
                 sample_couplings(
                     self.N,
                     self.device,
                     self.generator,
-                    self.lambda_right[idx],
-                    ferromagnetic,
+                    self.lambda_right[idx] / self.lambda_fc,
+                    not fc_right,
                 )
+                * self.lambda_fc
             )
 
         # Last Layer
@@ -178,12 +193,14 @@ class BatchMeIfUCan:
                 self.N,
                 self.device,
                 self.generator,
-                self.lambda_left[self.L - 1],
-                ferromagnetic,
+                self.lambda_left[self.L - 1] / self.lambda_fc,
+                not fc_left,
             )
+            * self.lambda_fc
         )
         couplings_buffer.append(
             sample_couplings(self.N, self.device, self.generator, self.J_D)
+            * self.lambda_internal
         )
         W_initial = sample_readout_weights(self.N, self.C, self.device, self.generator)
         W_back = W_initial.clone() / self.root_C
@@ -234,7 +251,7 @@ class BatchMeIfUCan:
 
         return couplings.to(self.device)
 
-    def build_is_learnable_mask(self, learn_cross_couplings: bool = True):
+    def build_is_learnable_mask(self, fc_left: bool, fc_right: bool):
         N, L, C = self.N, self.L, self.C
 
         mask = torch.ones_like(self.couplings)
@@ -247,12 +264,11 @@ class BatchMeIfUCan:
             mask[idx, :, N : 2 * N].fill_diagonal_(0)
             if idx > 0:
                 mask[idx, :, :N].fill_diagonal_(0)
+                if not fc_left:
+                    mask[idx, :, :N] = 0
             if idx < L - 1:
                 mask[idx, :, 2 * N :].fill_diagonal_(0)
-            if not learn_cross_couplings:
-                if idx > 0:
-                    mask[idx, :, :N] = 0
-                if idx < L - 1:
+                if not fc_right:
                     mask[idx, :, 2 * N : 3 * N] = 0
 
         return mask.to(self.device).to(torch.bool)
@@ -262,8 +278,20 @@ class BatchMeIfUCan:
         lr_tensor = torch.zeros_like(self.couplings)  # (L+1, N, 3N)
         for idx in range(L):
             lr_tensor[idx, :, :] = lr[idx] / math.sqrt(N)
-        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] / math.sqrt(C)  # overwrite
-        lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)
+            if idx < L:
+                lr_tensor[idx, :, N : 2 * N] *= self.lambda_internal
+                if idx < L - 1:
+                    lr_tensor[idx, :, 2 * N : 3 * N] *= (
+                        self.lambda_fc
+                    )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
+                if idx > 0:
+                    lr_tensor[idx, :, :N] *= (
+                        self.lambda_fc
+                    )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
+        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] / math.sqrt(
+            C
+        )  # overwrite W_back
+        lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)  # W_forth
         lr_tensor[self.is_learnable == 0] = 0
         return lr_tensor.to(self.device)
 

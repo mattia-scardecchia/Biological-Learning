@@ -212,24 +212,7 @@ class Handler:
             eval_interval = num_epochs + 1  # never evaluate
         self.flush_logs()
 
-        # log_dir = "torch-profiler-logs"
-        # with torch.profiler.profile(
-        #     activities=[torch.profiler.ProfilerActivity.CPU],
-        #     on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir),
-        #     record_shapes=True,
-        #     profile_memory=True,
-        # ) as prof:
-
-        # tracemalloc.start()
         for epoch in range(num_epochs):
-            # snapshot = tracemalloc.take_snapshot()
-            # top_stats = snapshot.statistics("lineno")
-            # message = f"Top 10 memory usage at epoch {epoch}:\n"
-            # for stat in top_stats[:10]:
-            #     message += f"{stat}\n"
-            # with open(self.memory_usage_file, "a") as f:
-            #     f.write(message)
-
             train_metrics = self.evaluate(inputs, targets, max_steps)
             self.log(train_metrics, type="train")
 

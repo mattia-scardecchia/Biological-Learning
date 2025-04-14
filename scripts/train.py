@@ -7,12 +7,13 @@ import time
 import hydra
 import numpy as np
 import torch
+import torch.nn as nn
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
-from src.data import prepare_cifar, prepare_mnist
+from src.data import prepare_cifar, prepare_hm_data, prepare_mnist
 from src.handler import Handler
 from src.utils import (
     load_synthetic_dataset,
@@ -136,6 +137,27 @@ def get_data(cfg):
             cifar10=cfg.data.cifar.cifar10,
             shuffle=True,
         )
+    elif cfg.data.dataset == "hidden_manifold":
+        C = cfg.data.hidden_manifold.C
+        (
+            train_inputs,
+            train_targets,
+            eval_inputs,
+            eval_targets,
+            teacher_linear,
+            teacher_mlp,
+        ) = prepare_hm_data(
+            cfg.data.hidden_manifold.D,
+            cfg.data.hidden_manifold.C,
+            cfg.data.P,
+            cfg.data.P_eval,
+            cfg.N,
+            cfg.data.hidden_manifold.L,
+            cfg.data.hidden_manifold.width,
+            nn.ReLU(),
+            cfg.seed,
+            cfg.data.hidden_manifold.binarize,
+        )
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
     return train_inputs, train_targets, eval_inputs, eval_targets, C
@@ -161,7 +183,9 @@ def parse_config(cfg):
     try:
         lambda_right = cfg.lambda_right
     except Exception:
-        lambda_right = [cfg.lambda_r] * (cfg.num_layers - 1) + [1.0] + [cfg.lambda_y]
+        lambda_right = (
+            [cfg.lambda_r] * (cfg.num_layers - 1) + [cfg.lambda_wback] + [cfg.lambda_y]
+        )
     return lr, weight_decay, threshold, lambda_left, lambda_right
 
 
@@ -183,6 +207,7 @@ def main(cfg):
         "C": C,
         "lambda_left": lambda_left,
         "lambda_right": lambda_right,
+        "lambda_internal": cfg.lambda_internal,
         "J_D": cfg.J_D,
         "device": cfg.device,
         "seed": cfg.seed,
@@ -191,7 +216,13 @@ def main(cfg):
         "weight_decay": torch.tensor(weight_decay),
         "init_mode": cfg.init_mode,
     }
-    model_cls = BatchMeIfUCan if cfg.fc else Classifier
+    if cfg.fc_left or cfg.fc_right:
+        model_kwargs["fc_left"] = cfg.fc_left
+        model_kwargs["fc_right"] = cfg.fc_right
+        model_kwargs["lambda_fc"] = cfg.lambda_fc
+        model_cls = BatchMeIfUCan
+    else:
+        model_cls = Classifier
     model = model_cls(**model_kwargs)
     handler = Handler(
         model,

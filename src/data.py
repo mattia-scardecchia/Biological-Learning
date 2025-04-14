@@ -4,7 +4,13 @@ from typing import Optional
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torchvision import datasets, transforms
+
+
+class SignActivation(nn.Module):
+    def forward(self, x):
+        return torch.sign(x)
 
 
 def load_balanced_dataset(save_dir: str):
@@ -257,4 +263,105 @@ def prepare_cifar(
         eval_labels,
         projection_matrix,
         median,
+    )
+
+
+@torch.inference_mode()
+def prepare_hm_data(
+    D,
+    C,
+    P,
+    P_eval,
+    M,
+    L,
+    width,
+    hidden_activation,
+    seed,
+    binarize,
+):
+    """
+    Prepares synthetic data using two teacher networks:
+      - teacher_linear: a linear model (D -> C) for label generation.
+      - teacher_mlp: an MLP with L hidden layers and final output dimension M.
+
+    Parameters:
+        D (int): Latent dimension.
+        C (int): Number of classes.
+        P (int): Number of patterns per class (total samples = P * C).
+        M (int): Output dimension of the teacher MLP.
+        L (int): Number of hidden layers in teacher MLP.
+        width (int or list[int]): Hidden layer width(s). If int, used for all layers.
+        activation (nn.Module or list[nn.Module]): Activation function(s) for hidden layers.
+        seed (int): Random seed.
+
+    Returns:
+        latent_inputs (torch.Tensor): Latent inputs (P * C, D), sorted by predicted class.
+        projected_inputs (torch.Tensor): Teacher MLP outputs, shape (P * C, M).
+        labels (torch.Tensor): One-hot labels, shape (P * C, C).
+        teacher_linear (nn.Module): The linear teacher network.
+        teacher_mlp (nn.Module): The MLP teacher network.
+    """
+    torch.manual_seed(seed)
+
+    # Instantiate the teacher_linear model.
+    teacher_linear = nn.Linear(D, C)
+
+    # Build the teacher_mlp.
+    if isinstance(width, int):
+        widths = [width] * L
+    else:
+        assert len(width) == L, "Length of width list must equal L."
+        widths = width
+
+    if not isinstance(hidden_activation, list):
+        activations = [hidden_activation] * L
+    else:
+        assert len(hidden_activation) == L, "Length of activation list must equal L."
+        activations = hidden_activation
+
+    mlp_layers = []
+    in_features = D
+    for i in range(L):
+        mlp_layers.append(nn.Linear(in_features, widths[i]))
+        mlp_layers.append(nn.LayerNorm(widths[i]))
+        mlp_layers.append(activations[i])
+        in_features = widths[i]
+    mlp_layers.append(nn.Linear(in_features, M))
+    if binarize:
+        mlp_layers.append(SignActivation())
+    teacher_mlp = nn.Sequential(*mlp_layers)
+
+    total_samples = (P + P_eval) * C
+    latent_inputs = torch.randn(total_samples, D)
+    logits = teacher_linear(latent_inputs)
+    preds = torch.argmax(logits, dim=1)
+    projected_inputs = teacher_mlp(latent_inputs)
+
+    # split the data into training and evaluation sets
+    latent_inputs_train = latent_inputs[: P * C]
+    logits_train = logits[: P * C]
+    preds_train = preds[: P * C]
+    projected_inputs_train = projected_inputs[: P * C]
+    latent_inputs_eval = latent_inputs[P * C :]
+    logits_eval = logits[P * C :]
+    preds_eval = preds[P * C :]
+    projected_inputs_eval = projected_inputs[P * C :]
+
+    # Sort samples by predicted class.
+    sort_idx = torch.argsort(preds_train)
+    train_inputs = projected_inputs_train[sort_idx]
+    train_preds = preds_train[sort_idx]
+    train_labels = torch.eye(C)[train_preds]
+    sort_idx = torch.argsort(preds_eval)
+    eval_inputs = projected_inputs_eval[sort_idx]
+    eval_preds = preds_eval[sort_idx]
+    eval_labels = torch.eye(C)[eval_preds]
+
+    return (
+        train_inputs,
+        train_labels,
+        eval_inputs,
+        eval_labels,
+        teacher_linear,
+        teacher_mlp,
     )

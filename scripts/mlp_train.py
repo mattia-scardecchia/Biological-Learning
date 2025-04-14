@@ -8,7 +8,12 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from src.mlp import DataModule, MLPClassifier, VisionDataModule, get_callbacks
+from scripts.train import get_data
+from src.mlp import (
+    MLPClassifier,
+    SimpleDataModule,
+    get_callbacks,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -21,26 +26,14 @@ def main(cfg: DictConfig):
     output_dir = HydraConfig.get().runtime.output_dir
     pl.seed_everything(cfg.seed)
 
-    # Data
-    if cfg.data.dataset == "synthetic":
-        data_module = DataModule(
-            dataset_config=cfg.data.synthetic,
-            batch_size=cfg.dataloader.batch_size,
-            val_split=cfg.data.synthetic.val_split,
-            test_split=cfg.data.synthetic.test_split,
-        )
-    elif cfg.data.dataset in ["mnist", "cifar"]:
-        dataset_config = (
-            cfg.data.mnist if cfg.data.dataset == "mnist" else cfg.data.cifar
-        )
-        data_module = VisionDataModule(
-            cfg.data.dataset,
-            dataset_config,
-            cfg.dataloader.batch_size,
-            cfg.seed,
-        )
-    else:
-        raise ValueError(f"Unsupported dataset: {cfg.dataset}")
+    train_inputs, train_targets, eval_inputs, eval_targets, C = get_data(cfg)
+    data_module = SimpleDataModule(
+        train_inputs,
+        train_targets,
+        eval_inputs,
+        eval_targets,
+        batch_size=cfg.dataloader.batch_size,
+    )
     data_module.setup()
 
     # Model

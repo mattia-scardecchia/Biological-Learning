@@ -29,6 +29,7 @@ class Classifier:
         J_D: float,
         lambda_left: list[float],
         lambda_right: list[float],
+        lambda_internal: float,
         lr: torch.Tensor,
         threshold: torch.Tensor,
         weight_decay: torch.Tensor,
@@ -53,6 +54,7 @@ class Classifier:
         assert len(lambda_left) == len(lambda_right) == num_layers + 1
         self.lambda_left = torch.tensor(lambda_left, device=device)
         self.lambda_right = torch.tensor(lambda_right, device=device)
+        self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.J_D = torch.tensor(J_D, device=device)
         self.device = device
         self.generator = torch.Generator(device=self.device)
@@ -188,7 +190,10 @@ class Classifier:
         return torch.sign(input)
 
     def internal_field_layer(self, states: torch.Tensor, layer_idx: int):
-        return torch.matmul(states[layer_idx], self.internal_couplings[layer_idx].T)
+        return (
+            torch.matmul(states[layer_idx], self.internal_couplings[layer_idx].T)
+            * self.lambda_internal
+        )
 
     def internal_field(self, states: torch.Tensor):
         """
@@ -196,7 +201,10 @@ class Classifier:
         computes the internal field.
         :param states: tensor of shape (num_layers, batch_size, N).
         """
-        return torch.matmul(states, self.internal_couplings.transpose(1, 2))
+        return (
+            torch.matmul(states, self.internal_couplings.transpose(1, 2))
+            * self.lambda_internal
+        )
 
     def left_field_layer(
         self, states: torch.Tensor, layer_idx: int, x: Optional[torch.Tensor] = None

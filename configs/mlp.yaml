@@ -1,40 +1,16 @@
 defaults:
   - /base@_here_
+  - /data@_here_
   - _self_
 
 name: mlp
 experiment_name: mlp_classifier
 seed: 42
 
-# Dataset parameters
-data:
-  dataset: "cifar"  # mnist, synthetic, cifar
-  synthetic:
-    N: 100  # Input dimensionality
-    P: 30   # Patterns per class (train + val + test)
-    C: 10   # Number of classes
-    p: 0.3  # Probability of flipping bits from prototypes
-    save_dir: "data/balanced_dataset"
-    load_if_available: true
-    dump: true
-    shuffle: true
-    val_split: 0.335  # Validation split ratio
-    test_split: 0.33  # Test split ratio
-  mnist:
-    P: 100       # patterns per class (train)
-    P_eval: 100  # patterns per class (val)
-    N: 1000
-    binarize: true
-  cifar:
-    P: 100       # patterns per class (train)
-    P_eval: 100  # patterns per class (val)
-    N: 1024
-    binarize: true
-
 # Model parameters
 model:
-  hidden_dims: []  # Hidden layer dimensions
-  dropout_rate: 0.0       # Dropout probability
+  hidden_dims: [1000, 1000]  # Hidden layer dimensions
+  dropout_rate: 0.3       # Dropout probability
 
 # Dataloader parameters
 dataloader:
@@ -43,8 +19,8 @@ dataloader:
 # Optimizer parameters
 optimizer:
   name: "adamw"  # Options: adam, adamw, sgd
-  learning_rate: 0.001
-  weight_decay: 1e-5
+  learning_rate: 0.0005
+  weight_decay: 1e-2
 
 # Learning rate scheduler
 scheduler:
@@ -74,7 +50,7 @@ checkpoint_callback:
 # Early stopping parameters
 early_stopping:
   enabled: true
-  monitor: "val_loss"
+  monitor: "train_loss"
   min_delta: 0.0001
   patience: 10
   mode: "min"
@@ -83,3 +59,17 @@ early_stopping:
 logging:
   dir: "lightning-logs"
   log_every_n_steps: 10
+
+# Data
+N: 1000
+data:
+  synthetic:
+    P: 30   # Patterns per class (train + val + test)
+    C: 10   # Number of classes
+    p: 0.3  # Probability of flipping bits from prototypes
+    save_dir: "data/balanced_dataset"
+    load_if_available: true
+    dump: true
+    shuffle: true
+    val_split: 0.335  # Validation split ratio
+    test_split: 0.33  # Test split ratio
