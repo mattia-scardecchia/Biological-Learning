@@ -361,11 +361,13 @@ def plot_couplings_histograms(logs, time_indexes, bins=30):
     # 2. Left Couplings + W_forth
     left = logs["left_couplings"]  # shape: (T, L-1, N, N)
     W_forth = logs["W_forth"]  # shape: (T, C, N)
+    N = left.shape[-1]
+    non_diagonal = ~np.eye(N, dtype=bool)
     fig_left, axes_left = create_subplots(L)
     for l in range(L - 1):
         ax = axes_left[l]
         for t in time_indexes:
-            data = left[t, l].flatten()
+            data = left[t, l][non_diagonal].flatten()
             ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
         ax.set_title(f"Layer {l + 1}")
         ax.legend()
