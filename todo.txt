@@ -1,8 +1,9 @@
 TODO:
+- initialize fc to ferromagnet?
+- residual connections with readout?
 - lavora nel notebook:
     - ottieni un buon feeling per il rilassamento e l'update
     - prova a concentrare il training sui pattern ancora sbagliati
-- segnale di classificazione su tutti gli strati
 
 (-) ottimizza ancora performance
     - profila su mps!
