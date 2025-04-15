@@ -1,16 +1,18 @@
 TODO:
+- lavora nel notebook:
+    - ottieni un buon feeling per il rilassamento e l'update
+    - prova a concentrare il training sui pattern ancora sbagliati
+- segnale di classificazione su tutti gli strati
 
-- tuna i parametri per mnist!
-
-
-(-) make config comfy
-(-) estendi a stati 0/1 o continui
 (-) ottimizza ancora performance
+    - profila su mps!
     - torch.compile?
-    - parallelizza W
+    - stai copiando memoria? e.g. unfold()
+    - stai usando tensori booleani dove puoi?
+    - ordine B,L assi?
+    - einsum è efficiente?
 
-
-poi:
+vecchia lista di idee (altre su notion):
 - sparse couplings
 - sparse activations (0-1)
 - stati continui? -> delta rule
