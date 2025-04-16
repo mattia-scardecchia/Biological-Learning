@@ -8,25 +8,26 @@ defaults:
 # Experiment
 name: 'prova'
 seed: 0
-device: 'cpu'
+device: 'mps'
 
 # Network and Relaxation
 N: 1000
-num_layers: 5
+H: 1000
+num_layers: 3
 J_D: 0.2
 max_steps: 10                                  # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros"
-fc_left: false
+fc_left: true
 fc_right: false
 # lambda_left: [6.0, 4.0, 4.0, 4.0, 4.0, 1.0]     # first is lambda_x, last affects the readout layer
 # lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 6.0]  # last is lambda_y, last but one affects the readout layer
-lambda_x: 6.0
+lambda_x: 2.25
 lambda_y: 12.0
-lambda_l: 4.0
-lambda_r: 2.0
+lambda_l: 2.25
+lambda_r: 0.0
 lambda_wback: 1.5
-lambda_internal: 1.0
-lambda_fc: 0.0
+lambda_internal: 0.0
+lambda_fc: 0.8
 
 # Perceptron Rule
 num_epochs: 10
@@ -39,7 +40,7 @@ lr_W: 0.05
 threshold_hidden: 2.5
 threshold_readout: 2.5
 weight_decay_J: 0.1
-weight_decay_W: 0.1
+weight_decay_W: 0.0
 
 # Evaluation
 eval_interval: 1  # epochs
