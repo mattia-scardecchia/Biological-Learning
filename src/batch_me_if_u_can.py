@@ -7,15 +7,22 @@ import torch.nn.functional as F
 
 
 def sample_readout_weights(N, C, device, generator):
-    W = torch.randint(
-        0,
-        2,
+    # W = torch.randint(
+    #     0,
+    #     2,
+    #     (N, C),
+    #     device=device,
+    #     dtype=torch.float32,
+    #     generator=generator,
+    # )
+    # return 2 * W - 1
+    W = torch.randn(
         (N, C),
         device=device,
         dtype=torch.float32,
         generator=generator,
     )
-    return 2 * W - 1
+    return W
 
 
 def sample_couplings(N, device, generator, J_D, ferromagnetic: bool = False):
@@ -93,6 +100,7 @@ class BatchMeIfUCan:
         :param seed: optional random seed.
         """
         assert len(lambda_left) == len(lambda_right) == num_layers + 1
+        assert not (lambda_fc == 0 and (fc_left or fc_right))
         self.L = num_layers
         self.N = N
         self.C = C
@@ -140,6 +148,7 @@ class BatchMeIfUCan:
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
+        # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
         # First Layer
         couplings_buffer.append(
@@ -203,7 +212,7 @@ class BatchMeIfUCan:
             * self.lambda_internal
         )
         W_initial = sample_readout_weights(self.N, self.C, self.device, self.generator)
-        W_back = W_initial.clone() / self.root_C
+        W_back = W_initial.clone() * self.lambda_right[-2] / self.root_C
         couplings_buffer.append(
             F.pad(
                 W_back,
@@ -214,7 +223,7 @@ class BatchMeIfUCan:
         )
 
         # Readout Layer
-        W_forth = W_initial.clone().T / self.root_N
+        W_forth = W_initial.clone().T * self.lambda_left[-1] / self.root_N
         couplings_buffer.append(
             F.pad(
                 W_forth,
@@ -288,10 +297,10 @@ class BatchMeIfUCan:
                     lr_tensor[idx, :, :N] *= (
                         self.lambda_fc
                     )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
-        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = lr[-2] / math.sqrt(
-            C
+        lr_tensor[L - 1, :, 2 * N : 2 * N + C] = (
+            lr[-2] * self.lambda_right[-2] / math.sqrt(C)
         )  # overwrite W_back
-        lr_tensor[L, :C, :N] = lr[-1] / math.sqrt(N)  # W_forth
+        lr_tensor[L, :C, :N] = lr[-1] * self.lambda_left[-1] / math.sqrt(N)  # W_forth
         lr_tensor[self.is_learnable == 0] = 0
         return lr_tensor.to(self.device)
 
@@ -306,9 +315,12 @@ class BatchMeIfUCan:
         return weight_decay_tensor
 
     def build_ignore_right_mask(self):
-        N = self.N
+        N, L = self.N, self.L
         mask = torch.ones_like(self.couplings).unsqueeze(0).repeat(2, 1, 1, 1)
         mask[1, :, :, 2 * N : 3 * N] = 0
+        mask[1, L - 1, :, 2 * N : 3 * N] = (
+            1  # keep W_back. NOTE: if lambda_r is 0, ignore_right=1 effectively only ignores the contribution of the true output.
+        )
         return mask.to(self.device)
 
     def initialize_state(

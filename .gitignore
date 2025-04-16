@@ -8,5 +8,6 @@ data/
 slurm_logs/
 checkpoints/
 lightning-logs/
+literature/
 
 *.stats

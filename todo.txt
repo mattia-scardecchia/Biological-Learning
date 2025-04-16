@@ -1,9 +1,20 @@
 TODO:
-- initialize fc to ferromagnet?
+- large hidden layers!
+    - a) introduce 'extra registers':
+        - have an argument N (input size) and an argument H >= N
+        - coupling matrices will be HxH, hidden dimension is H
+        - ferromagnetic couplings are only active for N units per layer
+        - this way, we are able to both propagate information and, potentially, learn representations!
 - residual connections with readout?
-- lavora nel notebook:
+    - a) singolo readout, teste multiple:
+        - introduci una matrice Wback e Wforth per ogni hidden layer
+        - il readout può attribuire pesi diversi ai diversi layer (anche 0 per iniziare...)
+- curriculum:
     - ottieni un buon feeling per il rilassamento e l'update
     - prova a concentrare il training sui pattern ancora sbagliati
+- dynamics: set up a script to study it!
+    - consider initialization, after learning in-distro, after learning out-of-distro
+    - convergence? relaxation time? chaos? distance travelled?
 
 (-) ottimizza ancora performance
     - profila su mps!
@@ -12,6 +23,12 @@ TODO:
     - stai usando tensori booleani dove puoi?
     - ordine B,L assi?
     - einsum è efficiente?
+
+
+
+
+
+
 
 vecchia lista di idee (altre su notion):
 - sparse couplings
