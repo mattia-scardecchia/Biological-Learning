@@ -5,12 +5,13 @@ defaults:
 
 name: mlp
 experiment_name: mlp_classifier
-seed: 42
+seed: 420
+N: 100  # data dimension
 
 # Model parameters
 model:
-  hidden_dims: [1000, 1000]  # Hidden layer dimensions
-  dropout_rate: 0.3       # Dropout probability
+  hidden_dims: [1000]  # Hidden layer dimensions
+  dropout_rate: 0.0       # Dropout probability
 
 # Dataloader parameters
 dataloader:
@@ -20,7 +21,7 @@ dataloader:
 optimizer:
   name: "adamw"  # Options: adam, adamw, sgd
   learning_rate: 0.0005
-  weight_decay: 1e-2
+  weight_decay: 0
 
 # Learning rate scheduler
 scheduler:
@@ -32,7 +33,7 @@ scheduler:
     
 # Training parameters
 trainer:
-  max_epochs: 30
+  max_epochs: 50
   accelerator: "auto"  # Options: cpu, gpu, auto
   devices: 1
   precision: 32  # Options: 32, 16, "bf16"
@@ -52,7 +53,7 @@ early_stopping:
   enabled: true
   monitor: "train_loss"
   min_delta: 0.0001
-  patience: 10
+  patience: 20
   mode: "min"
 
 # Logging parameters
@@ -60,8 +61,7 @@ logging:
   dir: "lightning-logs"
   log_every_n_steps: 10
 
-# Data
-N: 1000
+# Hamming balls data
 data:
   synthetic:
     P: 30   # Patterns per class (train + val + test)

@@ -1,6 +1,6 @@
 data:
-  dataset: 'mnist'  # 'synthetic', 'mnist', 'cifar', 'hidden_manifold'
-  P: 100             # train patterns per class
+  dataset: 'mnist'  # 'synthetic', 'mnist', 'cifar', 'hm'
+  P: 1000             # train patterns per class
   P_eval: 50          # eval patterns per class
   synthetic:
     C: 10             
@@ -11,9 +11,9 @@ data:
   cifar:
     binarize: true
     cifar10: true
-  hidden_manifold:
-    C: 10
-    D: 50
-    L: 3
-    width: 128
+  hm:
+    C: 2
+    D: 30
+    L: 1
+    width: 300
     binarize: true
