@@ -372,7 +372,7 @@ class BatchMeIfUCan:
             1
         )  # (B, N) -> (B, 1, H)
         if mode == "input":
-            neurons = x.repeat(1, L, 1)
+            neurons = x.unsqueeze(1).repeat(1, L, 1)
             y_hat = sample_state(C, batch_size, self.device, self.generator)
         elif mode == "zeros":
             neurons = torch.zeros((batch_size, L, H), device=self.device)
