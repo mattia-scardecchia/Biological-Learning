@@ -193,7 +193,13 @@ class MLPClassifier(pl.LightningModule):
 
 class SimpleDataModule(pl.LightningDataModule):
     def __init__(
-        self, train_inputs, train_targets, eval_inputs, eval_targets, batch_size
+        self,
+        train_inputs,
+        train_targets,
+        eval_inputs,
+        eval_targets,
+        batch_size,
+        num_workers=1,
     ):
         super().__init__()
         self.train_inputs = train_inputs
@@ -201,6 +207,7 @@ class SimpleDataModule(pl.LightningDataModule):
         self.eval_inputs = eval_inputs
         self.eval_targets = eval_targets
         self.batch_size = batch_size
+        self.num_workers = num_workers
 
     def setup(self, stage=None):
         self.train_dataset = TensorDataset(self.train_inputs, self.train_targets)
@@ -209,10 +216,22 @@ class SimpleDataModule(pl.LightningDataModule):
         self.num_classes = self.train_targets.shape[1]
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            persistent_workers=True,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size)
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            persistent_workers=True,
+        )
 
     def test_dataloader(self):
         return self.val_dataloader()

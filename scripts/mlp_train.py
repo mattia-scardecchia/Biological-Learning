@@ -33,6 +33,7 @@ def main(cfg: DictConfig):
         eval_inputs,
         eval_targets,
         batch_size=cfg.dataloader.batch_size,
+        num_workers=10,
     )
     data_module.setup()
 
