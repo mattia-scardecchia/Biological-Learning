@@ -137,8 +137,8 @@ def get_data(cfg):
             cifar10=cfg.data.cifar.cifar10,
             shuffle=True,
         )
-    elif cfg.data.dataset == "hidden_manifold":
-        C = cfg.data.hidden_manifold.C
+    elif cfg.data.dataset == "hm":
+        C = cfg.data.hm.C
         (
             train_inputs,
             train_targets,
@@ -147,16 +147,16 @@ def get_data(cfg):
             teacher_linear,
             teacher_mlp,
         ) = prepare_hm_data(
-            cfg.data.hidden_manifold.D,
-            cfg.data.hidden_manifold.C,
+            cfg.data.hm.D,
+            cfg.data.hm.C,
             cfg.data.P,
             cfg.data.P_eval,
             cfg.N,
-            cfg.data.hidden_manifold.L,
-            cfg.data.hidden_manifold.width,
+            cfg.data.hm.L,
+            cfg.data.hm.width,
             nn.ReLU(),
             cfg.seed,
-            cfg.data.hidden_manifold.binarize,
+            cfg.data.hm.binarize,
         )
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
@@ -220,6 +220,7 @@ def main(cfg):
         model_kwargs["fc_left"] = cfg.fc_left
         model_kwargs["fc_right"] = cfg.fc_right
         model_kwargs["lambda_fc"] = cfg.lambda_fc
+        model_kwargs["H"] = cfg.H
         model_cls = BatchMeIfUCan
     else:
         model_cls = Classifier

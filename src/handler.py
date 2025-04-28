@@ -34,6 +34,7 @@ class Handler:
         y: torch.Tensor,
         max_steps: int,
     ):
+        N = self.classifier.N
         logits, states, readout = [], [], []
         num_samples = x.shape[0]
         batch_size = min(1024, num_samples)
@@ -46,7 +47,7 @@ class Handler:
             states.append(states_batch)
             readout.append(readout_batch)
         logits = torch.cat(logits, dim=0)  # B, C
-        states = torch.cat(states, dim=0)  # B, L, N
+        states = torch.cat(states, dim=0)  # B, L, H
         readout = torch.cat(readout, dim=0)  # B, C
         predictions = torch.argmax(logits, dim=1)  # B,
         ground_truth = torch.argmax(y, dim=1)  # B,
@@ -57,7 +58,7 @@ class Handler:
             accuracy_by_class[cls] = (
                 (predictions[cls_mask] == cls).float().mean().item()
             )
-        similarity_to_input = torch.einsum("bln,bn->l", states, x) / (
+        similarity_to_input = torch.einsum("bln,bn->l", states[:, :, :N], x) / (
             self.classifier.N * x.shape[0]
         )
         return {
@@ -83,6 +84,7 @@ class Handler:
         :param max_steps: maximum relaxation sweeps.
         :return: tuple (list of sweeps per batch, list of update counts per batch)
         """
+        N = self.classifier.N
         metrics = defaultdict(list)
         num_samples = inputs.shape[0]
         idxs_perm = torch.randperm(num_samples, generator=self.classifier.cpu_generator)
@@ -98,7 +100,7 @@ class Handler:
             metrics["hidden_unsat"].append(out["hidden_unsat"])
             metrics["readout_unsat"].append(out["readout_unsat"])
             metrics["similarity_to_input"].append(
-                torch.einsum("bln,bn->l", out["update_states"], x)
+                torch.einsum("bln,bn->l", out["update_states"][:, :, :N], x)
                 / (self.classifier.N * batch_size)
             )
             if not self.skip_representations:

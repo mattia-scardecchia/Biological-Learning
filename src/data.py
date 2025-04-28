@@ -266,7 +266,7 @@ def prepare_cifar(
     )
 
 
-@torch.inference_mode()
+@torch.no_grad()
 def prepare_hm_data(
     D,
     C,
