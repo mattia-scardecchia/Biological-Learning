@@ -185,21 +185,21 @@ class BatchMeIfUCan:
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
         # First Layer
-        # J_x = torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
-        # for i in range(self.N, self.H):
-        #     J_x[i, i] = 0
-        J_x = (
-            sample_couplings(
-                self.N,
-                self.H,
-                self.device,
-                self.generator,
-                self.lambda_left[0] / self.lambda_fc,
-                not fc_left,
-                False,
-            )
-            * self.lambda_fc
-        )
+        J_x = torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
+        for i in range(self.N, self.H):
+            J_x[i, i] = 0
+        # J_x = (
+        #     sample_couplings(
+        #         self.N,
+        #         self.H,
+        #         self.device,
+        #         self.generator,
+        #         self.lambda_left[0] / self.lambda_fc,
+        #         not fc_left,
+        #         False,
+        #     )
+        #     * self.lambda_fc
+        # )
         couplings_buffer.append(J_x)
         couplings_buffer.append(
             sample_couplings(
@@ -431,7 +431,7 @@ class BatchMeIfUCan:
     def local_field(
         self,
         state: torch.Tensor,
-        ignore_right: int = 1,
+        ignore_right,
     ):
         """
         :param state: shape (B, L+3, H)
@@ -574,5 +574,5 @@ class BatchMeIfUCan:
 
     def fraction_unsat(self, state, ignore_right: int = 0):
         fields = self.local_field(state, ignore_right=ignore_right)
-        is_unsat = (fields * state[:, 1:-1, :]) <= 0
+        is_unsat = (fields * state[:, 1:-1, :]) < 0
         return is_unsat
