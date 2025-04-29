@@ -171,9 +171,21 @@ class BatchMeIfUCan:
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
         # First Layer
-        J_x = torch.eye(self.H, device=self.device) * self.lambda_left[0]
-        for i in range(self.N, self.H):
-            J_x[i, i] = 0
+        # J_x = torch.eye(self.H, device=self.device) * self.lambda_left[0]
+        # for i in range(self.N, self.H):
+        #     J_x[i, i] = 0
+        J_x = (
+            sample_couplings(
+                self.N,
+                self.H,
+                self.device,
+                self.generator,
+                self.lambda_left[0] / self.lambda_fc,
+                not fc_left,
+                False,
+            )
+            * self.lambda_fc
+        )
         couplings_buffer.append(J_x)
         couplings_buffer.append(
             sample_couplings(
@@ -181,18 +193,19 @@ class BatchMeIfUCan:
             )
             * self.lambda_internal
         )
-        couplings_buffer.append(
-            sample_couplings(
-                self.N,
-                self.H,
-                self.device,
-                self.generator,
-                self.lambda_right[0] / self.lambda_fc,
-                not fc_right,
-                False,
+        if self.L > 1:  # il L == 1, right couplings will be set later (W_back)
+            couplings_buffer.append(
+                sample_couplings(
+                    self.N,
+                    self.H,
+                    self.device,
+                    self.generator,
+                    self.lambda_right[0] / self.lambda_fc,
+                    not fc_right,
+                    False,
+                )
+                * self.lambda_fc
             )
-            * self.lambda_fc
-        )
 
         # Middle Layers
         for idx in range(1, self.L - 1):
@@ -228,24 +241,25 @@ class BatchMeIfUCan:
             )
 
         # Last Layer
-        couplings_buffer.append(
-            sample_couplings(
-                self.N,
-                self.H,
-                self.device,
-                self.generator,
-                self.lambda_left[self.L - 1] / self.lambda_fc,
-                not fc_left,
-                False,
+        if self.L > 1:  # il L == 1, left couplings have been set before
+            couplings_buffer.append(
+                sample_couplings(
+                    self.N,
+                    self.H,
+                    self.device,
+                    self.generator,
+                    self.lambda_left[self.L - 1] / self.lambda_fc,
+                    not fc_left,
+                    False,
+                )
+                * self.lambda_fc
             )
-            * self.lambda_fc
-        )
-        couplings_buffer.append(
-            sample_couplings(
-                self.N, self.H, self.device, self.generator, self.J_D, False, True
+            couplings_buffer.append(
+                sample_couplings(
+                    self.N, self.H, self.device, self.generator, self.J_D, False, True
+                )
+                * self.lambda_internal
             )
-            * self.lambda_internal
-        )
         W_initial = sample_readout_weights(self.H, self.C, self.device, self.generator)
         W_back = W_initial.clone() * self.lambda_right[-2] / self.root_C
         couplings_buffer.append(
