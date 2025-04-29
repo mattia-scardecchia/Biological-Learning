@@ -5,6 +5,20 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
+from src.utils import DTYPE
+
+# @torch.compile(mode="max-autotune")
+# def relax_kernel(state, couplings, mask, steps):
+#     for _ in range(steps):
+#         state_unfolded = state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)
+#         fields = torch.einsum(
+#             "lni,bli->bln",
+#             couplings * mask,
+#             state_unfolded,
+#         )
+#         state[:, 1:-1] = torch.sign(fields)
+#     return state
+
 
 def sample_readout_weights(N, C, device, generator):
     # W = torch.randint(
@@ -12,14 +26,14 @@ def sample_readout_weights(N, C, device, generator):
     #     2,
     #     (N, C),
     #     device=device,
-    #     dtype=torch.float32,
+    #     dtype=DTYPE,
     #     generator=generator,
     # )
     # return 2 * W - 1
     W = torch.randn(
         (N, C),
         device=device,
-        dtype=torch.float32,
+        dtype=DTYPE,
         generator=generator,
     )
     return W
@@ -38,10 +52,10 @@ def sample_couplings(
     Main diagonal
     """
     if ferromagnetic:
-        J = torch.zeros((H, H), device=device)
+        J = torch.zeros((H, H), device=device, dtype=DTYPE)
     else:
-        J = torch.randn(H, H, device=device, generator=generator)
-        J /= torch.sqrt(torch.tensor(H, device=device))
+        J = torch.randn(H, H, device=device, generator=generator, dtype=DTYPE)
+        J /= torch.sqrt(torch.tensor(H, device=device, dtype=DTYPE))
     J.fill_diagonal_(J_D.item())
     if not is_self_coupling:
         for i in range(N, H):
@@ -57,7 +71,7 @@ def sample_state(N, batch_size, device, generator):
         2,
         (batch_size, N),
         device=device,
-        dtype=torch.float32,
+        dtype=DTYPE,
         generator=generator,
     )
     return 2 * S - 1
@@ -171,7 +185,7 @@ class BatchMeIfUCan:
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
         # First Layer
-        # J_x = torch.eye(self.H, device=self.device) * self.lambda_left[0]
+        # J_x = torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
         # for i in range(self.N, self.H):
         #     J_x[i, i] = 0
         J_x = (
@@ -382,6 +396,7 @@ class BatchMeIfUCan:
         """
         H, N, C, L = self.H, self.N, self.C, self.L
         batch_size = x.shape[0]
+        x, y = x.to(self.device, DTYPE), y.to(self.device, DTYPE)
         x_padded = F.pad(x, (0, H - N, 0, 0), "constant", 0).unsqueeze(
             1
         )  # (B, N) -> (B, 1, H)
@@ -389,8 +404,8 @@ class BatchMeIfUCan:
             neurons = x.unsqueeze(1).repeat(1, L, 1)
             y_hat = sample_state(C, batch_size, self.device, self.generator)
         elif mode == "zeros":
-            neurons = torch.zeros((batch_size, L, H), device=self.device)
-            y_hat = torch.zeros((batch_size, C), device=self.device)
+            neurons = torch.zeros((batch_size, L, H), device=self.device, dtype=DTYPE)
+            y_hat = torch.zeros((batch_size, C), device=self.device, dtype=DTYPE)
         else:
             raise ValueError(f"Unknown mode: {mode}")
         y_hat = F.pad(y_hat, (0, H - C, 0, 0), mode="constant", value=0).unsqueeze(
@@ -455,11 +470,16 @@ class BatchMeIfUCan:
         max_steps: int,
         ignore_right: int,
     ):
+        # final_state = relax_kernel(
+        #     state, self.couplings, self.ignore_right_mask[ignore_right], max_steps
+        # )
+        # unsat = self.fraction_unsat(state)
+        # return final_state, max_steps, unsat
         sweeps = 0
         while sweeps < max_steps:
             sweeps += 1
             fields = self.local_field(state, ignore_right=ignore_right)
-            state[:, 1:-1, :] = torch.sign(fields)
+            torch.sign(fields, out=state[:, 1:-1, :])
         unsat = self.fraction_unsat(state)
         return state, sweeps, unsat
 
@@ -487,7 +507,9 @@ class BatchMeIfUCan:
         max_sweeps: int,
     ):
         state = self.initialize_state(
-            x, torch.zeros((x.shape[0], self.C), device=self.device), self.init_mode
+            x,
+            torch.zeros((x.shape[0], self.C), device=self.device, dtype=DTYPE),
+            self.init_mode,
         )
         final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=1)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T

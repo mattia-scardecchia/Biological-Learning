@@ -11,9 +11,8 @@ from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
 from src.classifier import Classifier
-from src.data import prepare_cifar, prepare_mnist
+from src.data import load_synthetic_dataset, prepare_cifar, prepare_mnist
 from src.utils import (
-    load_synthetic_dataset,
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_representation_similarity_among_inputs,

@@ -13,10 +13,14 @@ from matplotlib import pyplot as plt
 
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
-from src.data import prepare_cifar, prepare_hm_data, prepare_mnist
+from src.data import (
+    load_synthetic_dataset,
+    prepare_cifar,
+    prepare_hm_data,
+    prepare_mnist,
+)
 from src.handler import Handler
 from src.utils import (
-    load_synthetic_dataset,
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_couplings_distro_evolution,

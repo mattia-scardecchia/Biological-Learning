@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 from torchvision import datasets, transforms
 
+from src.utils import DTYPE
+
 
 class SignActivation(nn.Module):
     def forward(self, x):
@@ -118,6 +120,62 @@ def get_balanced_dataset(
     return inputs, targets, metadata, class_prototypes
 
 
+def load_synthetic_dataset(
+    N,
+    P,
+    C,
+    p,
+    eval_samples_per_class,
+    rng,
+    train_data_dir,
+    test_data_dir,
+    device,
+):
+    train_inputs, train_targets, train_metadata, train_class_prototypes = (
+        get_balanced_dataset(
+            N,
+            P,
+            C,
+            p,
+            train_data_dir,
+            None,
+            rng,
+            shuffle=False,
+            load_if_available=True,
+            dump=True,
+        )
+    )
+    eval_inputs, eval_targets, eval_metadata, eval_class_prototypes = (
+        get_balanced_dataset(
+            N,
+            eval_samples_per_class,
+            C,
+            p,
+            test_data_dir,
+            train_class_prototypes,
+            rng,
+            shuffle=False,
+            load_if_available=True,
+            dump=True,
+        )
+    )
+    train_inputs = torch.tensor(train_inputs, dtype=torch.float32).to(device)
+    train_targets = torch.tensor(train_targets, dtype=torch.float32).to(device)
+    eval_inputs = torch.tensor(eval_inputs, dtype=torch.float32).to(device)
+    eval_targets = torch.tensor(eval_targets, dtype=torch.float32).to(device)
+
+    return (
+        train_inputs,
+        train_targets,
+        eval_inputs,
+        eval_targets,
+        train_metadata,
+        train_class_prototypes,
+        eval_metadata,
+        eval_class_prototypes,
+    )
+
+
 def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True):
     # load MNIST dataset
     torch.manual_seed(seed)
@@ -179,7 +237,13 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffl
             eval_images.max() - eval_images.min()
         )
 
-    return train_images, train_labels, eval_images, eval_labels, projection_matrix
+    return (
+        train_images.to(DTYPE),
+        train_labels.to(DTYPE),
+        eval_images.to(DTYPE),
+        eval_labels.to(DTYPE),
+        projection_matrix,
+    )
 
 
 def prepare_cifar(
@@ -257,10 +321,10 @@ def prepare_cifar(
         median = None
 
     return (
-        train_images,
-        train_labels,
-        eval_images,
-        eval_labels,
+        train_images.to(DTYPE),
+        train_labels.to(DTYPE),
+        eval_images.to(DTYPE),
+        eval_labels.to(DTYPE),
         projection_matrix,
         median,
     )
@@ -358,10 +422,10 @@ def prepare_hm_data(
     eval_labels = torch.eye(C)[eval_preds]
 
     return (
-        train_inputs,
-        train_labels,
-        eval_inputs,
-        eval_labels,
+        train_inputs.to(dtype=DTYPE),
+        train_labels.to(dtype=DTYPE),
+        eval_inputs.to(dtype=DTYPE),
+        eval_labels.to(dtype=DTYPE),
         teacher_linear,
         teacher_mlp,
     )
