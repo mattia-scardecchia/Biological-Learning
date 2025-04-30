@@ -2,9 +2,7 @@ TODO:
 
 - Test in notebook with a single wide hidden layer!
     - sanity checks:
-        - couplings look right at init
-        - lr tensor looks right
-        - riesco a riprodurre il comportamento di un percettrone sparando J_D a infty?
+        - ensure healthy histograms (in regime i care about, i.e. H=1000)
     - readout weights:
         - keep as is (symmetric but independent, both learning steps)
         - make symmetric and learn only with W_forth step
@@ -19,6 +17,8 @@ TODO:
     - learning step:
         - before/after first exposure to an input?
         - exposure to miss-classified input after learning?
+    - failure case analysis
+        - can readout subnetwork to force onehot be useful?
 - Softification:
     - local cross entropy loss to train readout
     - soft update mask based on robustness
