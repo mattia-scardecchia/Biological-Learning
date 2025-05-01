@@ -46,7 +46,7 @@ class Perceptron:
 
 def main():
     # --- User-tunable parameters ---
-    P = 10
+    P = 1000
     P_eval = 50
     N = 100  # projection dimension
     num_epochs = 100
