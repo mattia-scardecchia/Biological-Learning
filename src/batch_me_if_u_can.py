@@ -380,7 +380,7 @@ class BatchMeIfUCan:
         H, L = self.H, self.L
         mask = torch.ones_like(self.couplings).unsqueeze(0).repeat(2, 1, 1, 1)
         mask[1, :, :, 2 * H : 3 * H] = 0
-        mask[1, L - 1, :, 2 * H : 3 * H] = 1  # keep W_back. with ignore_right=1
+        # mask[1, L - 1, :, 2 * H : 3 * H] = 1  # keep W_back with ignore_right=1
         return mask.to(self.device)
 
     def initialize_state(
@@ -401,7 +401,7 @@ class BatchMeIfUCan:
             1
         )  # (B, N) -> (B, 1, H)
         if mode == "input":
-            neurons = x.unsqueeze(1).repeat(1, L, 1)
+            neurons = x_padded.unsqueeze(1).repeat(1, L, 1)
             y_hat = sample_state(C, batch_size, self.device, self.generator)
         elif mode == "zeros":
             neurons = torch.zeros((batch_size, L, H), device=self.device, dtype=DTYPE)
@@ -462,6 +462,15 @@ class BatchMeIfUCan:
             / math.sqrt(state.shape[0])
         )
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
+
+        # # W_back <- W_forth (with appropriate scaling)
+        # self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+        #     self.W_forth.T
+        #     * self.root_H
+        #     * self.lambda_right[-2]
+        #     / self.root_C
+        #     / self.lambda_right[-1]
+        # )
         return is_unstable
 
     def relax(
