@@ -25,9 +25,16 @@ from src.handler import Handler
 #     "weight_decay_W": [0.0],
 # }
 HYPERPARAM_GRID = {
-    "lr_J": [0.1, 0.05],
-    "lr_W": [0.01, 0.005],
-    "threshold": [2.5, 3.0, 3.5],
+    "lr_wback": [0.0],
+    "lr_wforth": [0.5],
+    "lr_J": [0.05, 0.03, 0.01, 0.005, 0.1],
+    "threshold_hidden": [1.0, 1.5, 2.0, 2.5, 3.0],
+    "threshold_readout": [7.5],
+    "weight_decay_J": [0.02, 0.01, 0.005, 0.05, 0.1],
+    "weight_decay_wback": [0.0],
+    "weight_decay_wforth": [0.005],
+    "lambda_wback": [1.0, 0.5, 1.5],
+    "J_D": [0.5, 0.25],
 }
 
 
@@ -51,21 +58,19 @@ def main(cfg):
         i += 1
         logging.info(f"Starting iteration {i}")
         hyperparams = dict(zip(HYPERPARAM_GRID.keys(), values))
-        # lambda_left = (
-        #     [hyperparams["lambda_x"]]
-        #     + [hyperparams["lambda_l"]] * (cfg.num_layers - 1)
-        #     + [1.0]
-        # )
-        # lambda_right = (
-        #     [hyperparams["lambda_r"]] * (cfg.num_layers - 1)
-        #     + [1.0]
-        #     + [hyperparams["lambda_y"]]
-        # )
-        # weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
-        #     hyperparams["weight_decay_W"]
-        # ] * 2
-        lr = [hyperparams["lr_J"]] * cfg.num_layers + [hyperparams["lr_W"]] * 2
-        threshold = [hyperparams["threshold"]] * (cfg.num_layers + 1)
+        lr = [hyperparams["lr_J"]] * cfg.num_layers + [
+            hyperparams["lr_wback"],
+            hyperparams["lr_wforth"],
+        ]
+        threshold = [hyperparams["threshold_hidden"]] * cfg.num_layers + [
+            hyperparams["threshold_readout"]
+        ]
+        weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
+            hyperparams["weight_decay_wback"],
+            hyperparams["weight_decay_wforth"],
+        ]
+        lambda_right[-2] = hyperparams["lambda_wback"]
+        J_D = hyperparams["J_D"]
 
         # ================== Model Training ==================
 
@@ -75,7 +80,8 @@ def main(cfg):
             "C": C,
             "lambda_left": lambda_left,
             "lambda_right": lambda_right,
-            "J_D": cfg.J_D,
+            "lambda_internal": cfg.lambda_internal,
+            "J_D": J_D,
             "device": cfg.device,
             "seed": cfg.seed,
             "lr": torch.tensor(lr),
@@ -84,7 +90,14 @@ def main(cfg):
             "init_mode": cfg.init_mode,
             "symmetric_W": cfg.symmetric_W,
         }
-        model_cls = BatchMeIfUCan if cfg.fc else Classifier
+        if cfg.fc_left or cfg.fc_right:
+            model_kwargs["fc_left"] = cfg.fc_left
+            model_kwargs["fc_right"] = cfg.fc_right
+            model_kwargs["lambda_fc"] = cfg.lambda_fc
+            model_kwargs["H"] = cfg.H
+            model_cls = BatchMeIfUCan
+        else:
+            model_cls = Classifier
         model = model_cls(**model_kwargs)
         handler = Handler(
             model,
