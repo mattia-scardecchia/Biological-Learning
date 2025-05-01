@@ -64,7 +64,7 @@ def plot_representation_similarity(logs, save_dir, cfg):
         plt.close(fig)
 
 
-def plot_fields_breakdown(handler, cfg, save_dir, title, x, y):
+def plot_fields_breakdown(handler: Handler, cfg, save_dir, title, x, y):
     for max_steps in [0, cfg.max_steps]:
         for ignore_right in [0, 1]:
             for plot_total in [False, True]:
@@ -219,6 +219,7 @@ def main(cfg):
         "threshold": torch.tensor(threshold),
         "weight_decay": torch.tensor(weight_decay),
         "init_mode": cfg.init_mode,
+        "symmetric_W": cfg.symmetric_W,
     }
     if cfg.fc_left or cfg.fc_right:
         model_kwargs["fc_left"] = cfg.fc_left

@@ -278,10 +278,10 @@ class Handler:
                 **kwargs,
             )
         field_breakdown = self.classifier.field_breakdown(state, x, y)
-        nrows = 2
-        ncols = math.ceil((self.classifier.L + 1) / 2)
+        nrows = 2 if self.classifier.L > 1 else 1
+        ncols = math.ceil((self.classifier.L + 1) / nrows)
         fig, axs = plt.subplots(
-            nrows, ncols, figsize=(ncols * 5, nrows * 5), sharex=True
+            nrows, ncols, figsize=(ncols * 5, nrows * 5), sharex=False
         )
         colors = ["blue", "green", "red", "grey"]
 

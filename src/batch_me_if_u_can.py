@@ -117,6 +117,7 @@ class BatchMeIfUCan:
         init_mode: str,
         fc_left: bool,
         fc_right: bool,
+        symmetric_W: bool,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -145,6 +146,7 @@ class BatchMeIfUCan:
         self.fc_right = fc_right
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
+        self.symmetric_W = symmetric_W
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -401,7 +403,7 @@ class BatchMeIfUCan:
             1
         )  # (B, N) -> (B, 1, H)
         if mode == "input":
-            neurons = x_padded.unsqueeze(1).repeat(1, L, 1)
+            neurons = x_padded.repeat(1, L, 1)
             y_hat = sample_state(C, batch_size, self.device, self.generator)
         elif mode == "zeros":
             neurons = torch.zeros((batch_size, L, H), device=self.device, dtype=DTYPE)
@@ -464,13 +466,14 @@ class BatchMeIfUCan:
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
 
         # # W_back <- W_forth (with appropriate scaling)
-        # self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
-        #     self.W_forth.T
-        #     * self.root_H
-        #     * self.lambda_right[-2]
-        #     / self.root_C
-        #     / self.lambda_right[-1]
-        # )
+        if self.symmetric_W:
+            self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+                self.W_forth.T
+                * self.root_H
+                * self.lambda_right[-2]
+                / self.root_C
+                / self.lambda_right[-1]
+            )
         return is_unstable
 
     def relax(

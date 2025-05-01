@@ -7,41 +7,43 @@ defaults:
 
 # Experiment
 name: 'prova'
-seed: 0
-device: 'cpu'
+seed: 17
+device: 'mps'
 
 # Network and Relaxation
-N: 1000
-num_layers: 5
-J_D: 0.2
-max_steps: 10                                  # full sweeps over the network (relaxation)
+N: 100
+H: 500
+num_layers: 1
+J_D: 0.5
+max_steps: 5                                   # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros"
-fc_left: false
+fc_left: true
 fc_right: false
 # lambda_left: [6.0, 4.0, 4.0, 4.0, 4.0, 1.0]     # first is lambda_x, last affects the readout layer
 # lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 6.0]  # last is lambda_y, last but one affects the readout layer
-lambda_x: 6.0
-lambda_y: 12.0
+lambda_x: 100.0
+lambda_y: 100.0
 lambda_l: 4.0
 lambda_r: 2.0
-lambda_wback: 1.5
+lambda_wback: 1.0
 lambda_internal: 1.0
-lambda_fc: 0.0
+lambda_fc: 0.001
+symmetric_W: true
 
 # Perceptron Rule
-num_epochs: 10
+num_epochs: 20
 batch_size: 16
-# lr: [0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 0.01]                     # scaled by typical weight size. last two are for W_back and W_forth
-# threshold: [1.75, 1.75, 1.75, 1.75, 3.0, 3.0]                     # perceptron rule. last is for readout layer
-# weight_decay: [0.01, 0.001, 0.001, 0.001, 0.001, 0.0, 0.0]   # scaled by learning rate. last two are for W_back and W_forth
-lr_J: 0.05
-lr_W: 0.05
-threshold_hidden: 2.5
-threshold_readout: 2.5
-weight_decay_J: 0.1
-weight_decay_W: 0.1
+lr: [0.05, 0.0, 0.5]                         # scaled by typical weight size. last two are for W_back and W_forth
+threshold: [1.0, 7.5]                       # perceptron rule. last is for readout layer
+weight_decay: [0.02, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
+# lr_J: 0.1
+# lr_W: 0.1
+# threshold_hidden: -10.0
+# threshold_readout: 7.5
+# weight_decay_J: 0.02
+# weight_decay_W: 0.02
 
 # Evaluation
 eval_interval: 1  # epochs
-skip_representations: true
+skip_representations: false
 skip_couplings: false
