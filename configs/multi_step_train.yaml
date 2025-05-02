@@ -42,12 +42,14 @@ weight_decay: [0.02, 0.0, 0.005]              # scaled by learning rate. last tw
 # weight_decay_J: 0.02
 # weight_decay_W: 0.02
 
-# Evaluation
-eval_interval: 1  # epochs
-skip_representations: false
-skip_couplings: false
-
+# Phases
 num_epochs_warmup: 3
 num_epochs_full: 0
 num_epochs_couplings: 10
 num_epochs_tuning: 10
+
+# Evaluation
+eval_interval: 1  # epochs
+skip_representations: false
+skip_couplings: false
+skip_fields: false

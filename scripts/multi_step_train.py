@@ -260,16 +260,17 @@ def main(cfg):
     model.set_wback(torch.zeros_like(model.W_back))
 
     # Fields before phase 1
-    plots_dir = os.path.join(fields_plots_dir, "phase-1")
-    os.makedirs(plots_dir, exist_ok=True)
-    plot_fields_breakdown(
-        handler,
-        cfg,
-        plots_dir,
-        "Field Breakdown before Phase 1",
-        x,
-        y,
-    )
+    if not cfg.skip_fields:
+        plots_dir = os.path.join(fields_plots_dir, "phase-1")
+        os.makedirs(plots_dir, exist_ok=True)
+        plot_fields_breakdown(
+            handler,
+            cfg,
+            plots_dir,
+            "Field Breakdown before Phase 1",
+            x,
+            y,
+        )
 
     # Train
     if cfg.num_epochs_warmup > 0:
@@ -285,9 +286,9 @@ def main(cfg):
         )
 
         # Couplings evolution during phase 1
-        plots_dir = os.path.join(couplings_root_dir, "phase-1")
-        os.makedirs(plots_dir, exist_ok=True)
         if not cfg.skip_couplings:
+            plots_dir = os.path.join(couplings_root_dir, "phase-1")
+            os.makedirs(plots_dir, exist_ok=True)
             figs = plot_couplings_histograms(logs_1, [0, cfg.num_epochs_warmup - 1])
             for key, fig in figs.items():
                 fig.savefig(os.path.join(plots_dir, f"{key}.png"))
@@ -298,16 +299,17 @@ def main(cfg):
                 plt.close(fig)
 
         # Fields after phase 1
-        plots_dir = os.path.join(fields_plots_dir, "phase-1-end")
-        os.makedirs(plots_dir, exist_ok=True)
-        plot_fields_breakdown(
-            handler,
-            cfg,
-            plots_dir,
-            "Field Breakdown after Phase 1",
-            x,
-            y,
-        )
+        if not cfg.skip_fields:
+            plots_dir = os.path.join(fields_plots_dir, "phase-1-end")
+            os.makedirs(plots_dir, exist_ok=True)
+            plot_fields_breakdown(
+                handler,
+                cfg,
+                plots_dir,
+                "Field Breakdown after Phase 1",
+                x,
+                y,
+            )
 
     # copy wforth into wback
     model.set_wback(model.wforth2wback(model.W_forth))
@@ -320,16 +322,17 @@ def main(cfg):
     model.prepare_tensors(lr, weight_decay, threshold)
 
     # Fields before phase 2
-    plots_dir = os.path.join(fields_plots_dir, "phase-2")
-    os.makedirs(plots_dir, exist_ok=True)
-    plot_fields_breakdown(
-        handler,
-        cfg,
-        plots_dir,
-        "Field Breakdown before Phase 2",
-        x,
-        y,
-    )
+    if not cfg.skip_fields:
+        plots_dir = os.path.join(fields_plots_dir, "phase-2")
+        os.makedirs(plots_dir, exist_ok=True)
+        plot_fields_breakdown(
+            handler,
+            cfg,
+            plots_dir,
+            "Field Breakdown before Phase 2",
+            x,
+            y,
+        )
 
     # Train
     if cfg.num_epochs_couplings > 0:
@@ -345,9 +348,9 @@ def main(cfg):
         )
 
         # Couplings evolution during phase2
-        plots_dir = os.path.join(couplings_root_dir, "phase-2")
-        os.makedirs(plots_dir, exist_ok=True)
         if not cfg.skip_couplings:
+            plots_dir = os.path.join(couplings_root_dir, "phase-2")
+            os.makedirs(plots_dir, exist_ok=True)
             figs = plot_couplings_histograms(logs_2, [0, cfg.num_epochs_couplings - 1])
             for key, fig in figs.items():
                 fig.savefig(os.path.join(plots_dir, f"{key}.png"))
@@ -358,18 +361,77 @@ def main(cfg):
                 plt.close(fig)
 
         # Fields after phase 2
-        plots_dir = os.path.join(fields_plots_dir, "phase-2-end")
+        if not cfg.skip_fields:
+            plots_dir = os.path.join(fields_plots_dir, "phase-2-end")
+            os.makedirs(plots_dir, exist_ok=True)
+            plot_fields_breakdown(
+                handler,
+                cfg,
+                plots_dir,
+                "Field Breakdown after Phase 2",
+                x,
+                y,
+            )
+
+    # === Phase 2bis: train the full network as usual ===
+    lr = torch.tensor(cfg.lr)
+    weight_decay = torch.tensor(cfg.weight_decay)
+    threshold = torch.tensor(cfg.threshold)
+    model.prepare_tensors(lr, weight_decay, threshold)
+
+    # Fields before phase 2bis
+    if not cfg.skip_fields:
+        plots_dir = os.path.join(fields_plots_dir, "phase-2bis")
         os.makedirs(plots_dir, exist_ok=True)
         plot_fields_breakdown(
             handler,
             cfg,
             plots_dir,
-            "Field Breakdown after Phase 2",
+            "Field Breakdown before Phase 2bis",
             x,
             y,
         )
 
-    # Phase 3: tune the readout weights, with no feedback from the readout
+    # Train
+    if cfg.num_epochs_full > 0:
+        logs_2 = handler.train_loop(
+            cfg.num_epochs_full,
+            train_inputs,
+            train_targets,
+            cfg.max_steps,
+            cfg.batch_size,
+            eval_interval=cfg.eval_interval,
+            eval_inputs=eval_inputs,
+            eval_targets=eval_targets,
+        )  # assume either 2 or 2bis happens (overwrite logs_2)
+
+        # Couplings evolution during phase 2bis
+        if not cfg.skip_couplings:
+            plots_dir = os.path.join(couplings_root_dir, "phase-2bis")
+            os.makedirs(plots_dir, exist_ok=True)
+            figs = plot_couplings_histograms(logs_2, [0, cfg.num_epochs_couplings - 1])
+            for key, fig in figs.items():
+                fig.savefig(os.path.join(plots_dir, f"{key}.png"))
+                plt.close(fig)
+            figs = plot_couplings_distro_evolution(logs_2)
+            for key, fig in figs.items():
+                fig.savefig(os.path.join(plots_dir, f"{key}_evolution.png"))
+                plt.close(fig)
+
+        # Fields after phase 2
+        if not cfg.skip_fields:
+            plots_dir = os.path.join(fields_plots_dir, "phase-2bis-end")
+            os.makedirs(plots_dir, exist_ok=True)
+            plot_fields_breakdown(
+                handler,
+                cfg,
+                plots_dir,
+                "Field Breakdown after Phase 2bis",
+                x,
+                y,
+            )
+
+    # === Phase 3: tune the readout weights, with no feedback from the readout ===
     lr = torch.tensor(cfg.lr)
     lr[:-2] = 0.0
     weight_decay = torch.tensor(cfg.weight_decay)
@@ -403,9 +465,9 @@ def main(cfg):
         )
 
         # Couplings evolution during phase 3
-        plots_dir = os.path.join(couplings_root_dir, "phase-3")
-        os.makedirs(plots_dir, exist_ok=True)
         if not cfg.skip_couplings:
+            plots_dir = os.path.join(couplings_root_dir, "phase-3")
+            os.makedirs(plots_dir, exist_ok=True)
             figs = plot_couplings_histograms(logs_3, [0, cfg.num_epochs_tuning - 1])
             for key, fig in figs.items():
                 fig.savefig(os.path.join(plots_dir, f"{key}.png"))
@@ -416,16 +478,17 @@ def main(cfg):
                 plt.close(fig)
 
         # Fields after phase 3
-        plots_dir = os.path.join(fields_plots_dir, "phase-3-end")
-        os.makedirs(plots_dir, exist_ok=True)
-        plot_fields_breakdown(
-            handler,
-            cfg,
-            plots_dir,
-            "Field Breakdown after Phase 3",
-            x,
-            y,
-        )
+        if not cfg.skip_fields:
+            plots_dir = os.path.join(fields_plots_dir, "phase-3-end")
+            os.makedirs(plots_dir, exist_ok=True)
+            plot_fields_breakdown(
+                handler,
+                cfg,
+                plots_dir,
+                "Field Breakdown after Phase 3",
+                x,
+                y,
+            )
 
     t1 = time.time()
     logging.info(f"Training took {t1 - t0:.2f} seconds")
@@ -459,7 +522,10 @@ def main(cfg):
         )
 
     # Representations
-    if not cfg.skip_representations and cfg.num_epochs_couplings > 0:
+    if (
+        not cfg.skip_representations
+        and (cfg.num_epochs_couplings + cfg.num_epochs_full) > 0
+    ):
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
         plot_representation_similarity(
