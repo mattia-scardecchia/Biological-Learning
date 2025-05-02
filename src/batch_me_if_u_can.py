@@ -147,6 +147,7 @@ class BatchMeIfUCan:
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
         self.symmetric_W = symmetric_W
+        self.init_mode = init_mode
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -161,12 +162,12 @@ class BatchMeIfUCan:
         self.couplings = self.initialize_couplings(
             fc_left=fc_left, fc_right=fc_right
         )  # L+1, H, 3H
-        self.is_learnable = self.build_is_learnable_mask(fc_left, fc_right)
-        self.lr = self.build_lr_tensor(lr)
-        self.weight_decay = self.build_weight_decay_tensor(weight_decay)
-        self.threshold = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()
-        self.init_mode = init_mode
+        self.prepare_tensors(lr, weight_decay, threshold)
+        # self.is_learnable = self.build_is_learnable_mask(self.fc_left, self.fc_right)
+        # self.lr = self.build_lr_tensor(lr)
+        # self.weight_decay = self.build_weight_decay_tensor(weight_decay)
+        # self.threshold = threshold.to(self.device)
+        # self.ignore_right_mask = self.build_ignore_right_mask()
 
         logging.info(f"Initialized {self} on device: {self.device}")
         logging.info(
@@ -181,6 +182,13 @@ class BatchMeIfUCan:
             f"threshold={threshold},\n"
             f"weight_decay={weight_decay}\n"
         )
+
+    def prepare_tensors(self, lr, weight_decay, threshold):
+        self.is_learnable = self.build_is_learnable_mask(self.fc_left, self.fc_right)
+        self.lr = self.build_lr_tensor(lr)
+        self.weight_decay = self.build_weight_decay_tensor(weight_decay)
+        self.threshold = threshold.to(self.device)
+        self.ignore_right_mask = self.build_ignore_right_mask()
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
@@ -466,14 +474,32 @@ class BatchMeIfUCan:
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
 
         # # W_back <- W_forth (with appropriate scaling)
-        if self.symmetric_W:
+        if self.symmetric_W == "buggy":
             self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
                 self.W_forth.T
                 * self.root_H
                 * self.lambda_right[-2]
                 / self.root_C
-                / self.lambda_right[-1]
+                / self.lambda_left[-1]
+                / 100
             )
+        elif self.symmetric_W:
+            norm_old = self.W_back.norm(dim=1)
+            self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+                self.W_forth / self.W_forth.norm(dim=0)[None, :]
+            ).T * norm_old[:, None]
+            # self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+            #     (self.W_forth / self.W_forth.norm(dim=1)[:, None]).T
+            #     * self.lambda_right[-2]
+            #     / self.root_C
+            # )
+            # self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] += (
+            #     delta[-1, : self.C, : self.H].T
+            #     * self.root_H
+            #     * self.lambda_right[-2]
+            #     / self.root_C
+            #     / self.lambda_left[-1]
+            # )
         return is_unstable
 
     def relax(
@@ -527,6 +553,18 @@ class BatchMeIfUCan:
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
         states, readout = final_state[:, 1:-2], final_state[:, -2]
         return logits, states, readout
+
+    def set_wback(self, new):
+        self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = new
+
+    def wforth2wback(self, wforth):
+        return (
+            wforth.T
+            * self.root_H
+            * self.lambda_right[-2]
+            / self.root_C
+            / self.lambda_left[-1]
+        )
 
     @property
     def W_back(self):

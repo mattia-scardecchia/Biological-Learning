@@ -185,7 +185,7 @@ class Handler:
                     self.classifier.right_couplings.clone()
                 )
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def train_loop(
         self,
         num_epochs: int,
@@ -300,14 +300,15 @@ class Handler:
                     label="internal",
                     color=colors[0],
                 )
-                ax.hist(
-                    left.flatten(),
-                    bins=20,
-                    density=False,
-                    alpha=0.5,
-                    label="left",
-                    color=colors[1],
-                )
+                if idx > 0:
+                    ax.hist(
+                        left.flatten(),
+                        bins=20,
+                        density=False,
+                        alpha=0.5,
+                        label="left",
+                        color=colors[1],
+                    )
                 ax.hist(
                     right.flatten(),
                     bins=20,

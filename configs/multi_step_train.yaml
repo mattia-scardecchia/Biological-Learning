@@ -7,7 +7,7 @@ defaults:
 
 # Experiment
 name: 'prova'
-seed: 17
+seed: 23
 device: 'mps'
 
 # Network and Relaxation
@@ -25,13 +25,12 @@ lambda_x: 100.0
 lambda_y: 100.0
 lambda_l: 4.0
 lambda_r: 2.0
-lambda_wback: 1.0
+lambda_wback: 0.1
 lambda_internal: 1.0
 lambda_fc: 0.001
-symmetric_W: buggy
+symmetric_W: false
 
 # Perceptron Rule
-num_epochs: 20
 batch_size: 16
 lr: [0.05, 0.0, 0.5]                        # scaled by typical weight size. last two are for W_back and W_forth
 threshold: [1.0, 7.5]                       # perceptron rule. last is for readout layer
@@ -47,3 +46,8 @@ weight_decay: [0.02, 0.0, 0.005]              # scaled by learning rate. last tw
 eval_interval: 1  # epochs
 skip_representations: false
 skip_couplings: false
+
+num_epochs_warmup: 3
+num_epochs_full: 0
+num_epochs_couplings: 10
+num_epochs_tuning: 10
