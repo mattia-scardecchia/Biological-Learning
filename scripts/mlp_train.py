@@ -75,6 +75,9 @@ def main(cfg: DictConfig):
     trainer.fit(model, data_module)
 
     # Test model
+    logger.info("Evaluating on train set...")
+    train_results = trainer.test(model, data_module)
+    logger.info(f"Train results: {train_results}")
     logger.info("Evaluating on eval set...")
     eval_results = trainer.test(model, data_module)
     logger.info(f"Eval results: {eval_results}")
@@ -82,6 +85,8 @@ def main(cfg: DictConfig):
     # Save test results alongside model
     with open(os.path.join(output_dir, "eval_results.json"), "w") as f:
         json.dump(eval_results, f, indent=4)
+    with open(os.path.join(output_dir, "train_results.json"), "w") as f:
+        json.dump(train_results, f, indent=4)
 
     logger.info(f"Training completed. Model and logs saved to {trainer.log_dir}")
 
