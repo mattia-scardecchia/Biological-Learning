@@ -25,13 +25,13 @@ lambda_x: 100.0
 lambda_y: 100.0
 lambda_l: 4.0
 lambda_r: 2.0
-lambda_wback: 1.0
+lambda_wback: 1.0  # (/100 if buggy)
 lambda_internal: 1.0
 lambda_fc: 0.001
 symmetric_W: buggy
 
 # Perceptron Rule
-num_epochs: 20
+num_epochs: 40
 batch_size: 16
 lr: [0.05, 0.0, 0.5]                        # scaled by typical weight size. last two are for W_back and W_forth
 threshold: [1.0, 7.5]                       # perceptron rule. last is for readout layer
