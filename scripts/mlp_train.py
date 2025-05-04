@@ -48,6 +48,7 @@ def main(cfg: DictConfig):
         optimizer=cfg.optimizer.name,
         scheduler=cfg.scheduler.name if cfg.scheduler.enabled else None,
         scheduler_params=cfg.scheduler.params if cfg.scheduler.enabled else None,
+        random_features=cfg.random_features,
     )
 
     # Get callbacks

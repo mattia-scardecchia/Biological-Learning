@@ -28,6 +28,7 @@ class MLPClassifier(pl.LightningModule):
         optimizer: str = "adam",
         scheduler: Optional[str] = None,
         scheduler_params: Optional[Dict[str, Any]] = None,
+        random_features: Optional[bool] = False,
     ):
         """
         Initialize the MLP classifier.
@@ -45,14 +46,18 @@ class MLPClassifier(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+        self.random_features = random_features
 
         # Build network layers
         layers = []
         prev_dim = input_dim
 
         for i, hidden_dim in enumerate(hidden_dims):
-            nn.LayerNorm(prev_dim)
-            layers.append(nn.Linear(prev_dim, hidden_dim))
+            linear = nn.Linear(prev_dim, hidden_dim)
+            if self.random_features:
+                for p in linear.parameters():
+                    p.requires_grad = False
+            layers.append(linear)
             layers.append(nn.ReLU())
             layers.append(nn.Dropout(dropout_rate))
             prev_dim = hidden_dim

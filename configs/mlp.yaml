@@ -5,17 +5,18 @@ defaults:
 
 name: mlp
 experiment_name: mlp_classifier
-seed: 420
+seed: 17
 N: 100  # data dimension
+random_features: false  # if true, freeze all layers except the last
 
 # Model parameters
 model:
-  hidden_dims: [1000]  # Hidden layer dimensions
+  hidden_dims: [100]  # Hidden layer dimensions
   dropout_rate: 0.0       # Dropout probability
 
 # Dataloader parameters
 dataloader:
-  batch_size: 32
+  batch_size: 16
 
 # Optimizer parameters
 optimizer:
@@ -51,10 +52,10 @@ checkpoint_callback:
 # Early stopping parameters
 early_stopping:
   enabled: true
-  monitor: "train_loss"
-  min_delta: 0.0001
+  monitor: "train_acc"
+  min_delta: 0.001
   patience: 20
-  mode: "min"
+  mode: "max"
 
 # Logging parameters
 logging:
