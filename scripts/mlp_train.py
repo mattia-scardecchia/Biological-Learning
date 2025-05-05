@@ -76,7 +76,7 @@ def main(cfg: DictConfig):
 
     # Test model
     logger.info("Evaluating on train set...")
-    train_results = trainer.test(model, data_module)
+    train_results = trainer.test(model, data_module.train_dataloader())
     logger.info(f"Train results: {train_results}")
     logger.info("Evaluating on eval set...")
     eval_results = trainer.test(model, data_module)
