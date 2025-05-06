@@ -305,6 +305,8 @@ class Handler:
             left = field_breakdown["left"][:, idx].cpu()
             right = field_breakdown["right"][:, idx].cpu()
             total = field_breakdown["total"][:, idx].cpu()
+            if idx == 0:
+                total = total - left
             if not plot_total:
                 ax.hist(
                     internal.flatten(),
@@ -347,7 +349,9 @@ class Handler:
         # Readout layer
         readout_left = field_breakdown["left"][:, -1, : self.classifier.C].cpu()
         readout_right = field_breakdown["right"][:, -1, : self.classifier.C].cpu()
-        total = field_breakdown["total"][:, -1, : self.classifier.C].cpu()
+        readout_total = (
+            field_breakdown["total"][:, -1, : self.classifier.C].cpu() - readout_right
+        )
         ax = axs.flatten()[self.classifier.L]
         if not plot_total:
             ax.hist(
@@ -358,17 +362,17 @@ class Handler:
                 label="left",
                 color=colors[1],
             )
-            ax.hist(
-                readout_right.flatten(),
-                bins=20,
-                density=False,
-                alpha=0.5,
-                label="right",
-                color=colors[2],
-            )
+            # ax.hist(
+            #     readout_right.flatten(),
+            #     bins=20,
+            #     density=False,
+            #     alpha=0.5,
+            #     label="right",
+            #     color=colors[2],
+            # )
         else:
             ax.hist(
-                total.flatten(),
+                readout_total.flatten(),
                 bins=20,
                 density=False,
                 alpha=0.5,
