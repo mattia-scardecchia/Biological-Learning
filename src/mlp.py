@@ -47,8 +47,6 @@ class MLPClassifier(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.random_features = random_features
-        if self.random_features:
-            assert len(hidden_dims) == 1
 
         # Build network layers
         layers = []
@@ -60,7 +58,10 @@ class MLPClassifier(pl.LightningModule):
                 for p in linear.parameters():
                     p.requires_grad = False
             layers.append(linear)
-            if not self.random_features:
+            if self.random_features:
+                assert len(hidden_dims) == 1
+                layers.append(nn.Tanh())
+            else:
                 layers.append(nn.ReLU())
                 layers.append(nn.Dropout(dropout_rate))
             prev_dim = hidden_dim
