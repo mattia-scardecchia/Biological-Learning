@@ -50,3 +50,4 @@ p_curriculum: 0.5
 eval_interval: 1  # epochs
 skip_representations: false
 skip_couplings: false
+skip_fields: false

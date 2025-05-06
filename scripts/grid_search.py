@@ -7,11 +7,22 @@ import numpy as np
 import pandas as pd
 import torch
 from hydra.core.hydra_config import HydraConfig
+from matplotlib import pyplot as plt
 
-from scripts.train import get_data, parse_config
+from scripts.train import (
+    get_data,
+    parse_config,
+    plot_fields_breakdown,
+    plot_representation_similarity,
+)
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
 from src.handler import Handler
+from src.utils import (
+    plot_accuracy_history,
+    plot_couplings_distro_evolution,
+    plot_couplings_histograms,
+)
 
 # HYPERPARAM_GRID = {
 #     "lr_J": [0.05, 0.075, 0.1],
@@ -74,6 +85,18 @@ def main(cfg):
 
         # ================== Model Training ==================
 
+        run_repr = "_".join(
+            [
+                f"{key}_{val}"
+                for key, val in hyperparams.items()
+                if len(HYPERPARAM_GRID[key]) > 1
+            ]
+        )
+        plots_dir = os.path.join(
+            output_dir,
+            f"plots_{run_repr}",
+        )
+
         model_kwargs = {
             "num_layers": cfg.num_layers,
             "N": cfg.N,
@@ -102,12 +125,30 @@ def main(cfg):
         handler = Handler(
             model,
             cfg.init_mode,
-            True,
-            True,
+            cfg.skip_representations,
+            cfg.skip_couplings,
             output_dir,
             cfg.begin_curriculum,
             cfg.p_curriculum,
         )
+
+        # Fields init
+        fields_plots_dir = os.path.join(plots_dir, "fields")
+        os.makedirs(fields_plots_dir, exist_ok=True)
+        if not cfg.skip_fields:
+            init_plots_dir = os.path.join(fields_plots_dir, "init")
+            os.makedirs(init_plots_dir, exist_ok=True)
+            idxs = np.random.randint(0, len(train_inputs), 100)
+            x = train_inputs[idxs]
+            y = train_targets[idxs]
+            plot_fields_breakdown(
+                handler,
+                cfg,
+                init_plots_dir,
+                "Field Breakdown at Initialization",
+                x,
+                y,
+            )
 
         logs = handler.train_loop(
             cfg.num_epochs,
@@ -119,6 +160,46 @@ def main(cfg):
             eval_inputs=eval_inputs,
             eval_targets=eval_targets,
         )
+
+        # Fields final
+        if not cfg.skip_fields:
+            final_plots_dir = os.path.join(fields_plots_dir, "final")
+            os.makedirs(final_plots_dir, exist_ok=True)
+            plot_fields_breakdown(
+                handler,
+                cfg,
+                final_plots_dir,
+                "Field Breakdown at the End of Training",
+                train_inputs,
+                train_targets,
+            )
+
+        # Accuracy history
+        eval_epochs = np.arange(1, cfg.num_epochs + 1, cfg.eval_interval)
+        fig = plot_accuracy_history(
+            logs["train_acc_history"], logs["eval_acc_history"], eval_epochs
+        )
+        plt.savefig(os.path.join(plots_dir, "accuracy_history.png"))
+        plt.close(fig)
+
+        # Representations
+        if not cfg.skip_representations:
+            representations_root_dir = os.path.join(plots_dir, "representations")
+            os.makedirs(representations_root_dir, exist_ok=True)
+            plot_representation_similarity(logs, representations_root_dir, cfg)
+
+        # Couplings
+        if not cfg.skip_couplings:
+            couplings_root_dir = os.path.join(plots_dir, "couplings")
+            os.makedirs(couplings_root_dir, exist_ok=True)
+            figs = plot_couplings_histograms(logs, [0, cfg.num_epochs - 1])
+            for key, fig in figs.items():
+                fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
+                plt.close(fig)
+            figs = plot_couplings_distro_evolution(logs)
+            for key, fig in figs.items():
+                fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
+                plt.close(fig)
 
         # ================== Log results ==================
 

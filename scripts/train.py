@@ -242,19 +242,20 @@ def main(cfg):
 
     fields_plots_dir = os.path.join(output_dir, "fields")
     os.makedirs(fields_plots_dir, exist_ok=True)
-    init_plots_dir = os.path.join(fields_plots_dir, "init")
-    os.makedirs(init_plots_dir, exist_ok=True)
-    idxs = np.random.randint(0, len(train_inputs), 100)
-    x = train_inputs[idxs]
-    y = train_targets[idxs]
-    plot_fields_breakdown(
-        handler,
-        cfg,
-        init_plots_dir,
-        "Field Breakdown at Initialization",
-        x,
-        y,
-    )
+    if not cfg.skip_fields:
+        init_plots_dir = os.path.join(fields_plots_dir, "init")
+        os.makedirs(init_plots_dir, exist_ok=True)
+        idxs = np.random.randint(0, len(train_inputs), 100)
+        x = train_inputs[idxs]
+        y = train_targets[idxs]
+        plot_fields_breakdown(
+            handler,
+            cfg,
+            init_plots_dir,
+            "Field Breakdown at Initialization",
+            x,
+            y,
+        )
 
     # ================== Training ==================
     profiler = cProfile.Profile()
@@ -284,16 +285,17 @@ def main(cfg):
 
     # ================== Evaluation and Plotting ==================
     # Field Breakdown
-    final_plots_dir = os.path.join(fields_plots_dir, "final")
-    os.makedirs(final_plots_dir, exist_ok=True)
-    plot_fields_breakdown(
-        handler,
-        cfg,
-        final_plots_dir,
-        "Field Breakdown at the End of Training",
-        train_inputs,
-        train_targets,
-    )
+    if not cfg.skip_fields:
+        final_plots_dir = os.path.join(fields_plots_dir, "final")
+        os.makedirs(final_plots_dir, exist_ok=True)
+        plot_fields_breakdown(
+            handler,
+            cfg,
+            final_plots_dir,
+            "Field Breakdown at the End of Training",
+            train_inputs,
+            train_targets,
+        )
 
     # Evaluate final model and plot Accuracy
     eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
