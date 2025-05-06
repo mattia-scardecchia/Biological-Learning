@@ -18,11 +18,15 @@ class Handler:
         skip_representations: bool,
         skip_couplings: bool,
         output_dir: str,
+        begin_curriculum: float = 1.0,
+        p_curriculum: float = 0.5,
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
         self.skip_couplings = skip_couplings
         self.init_mode = init_mode
+        self.begin_curriculum = begin_curriculum
+        self.p_curriculum = p_curriculum
         self.flush_logs()
 
         self.output_dir = output_dir
@@ -217,12 +221,22 @@ class Handler:
         for epoch in range(num_epochs):
             train_metrics = self.evaluate(inputs, targets, max_steps)
             self.log(train_metrics, type="train")
+            if epoch / num_epochs >= self.begin_curriculum:
+                preds = train_metrics["logits"].argmax(dim=1)  # B,
+                labels = targets.argmax(dim=1)  # B,
+                is_wrong = (preds != labels).float()
+                keep = torch.bernoulli(
+                    is_wrong * self.p_curriculum
+                    + (1 - is_wrong) * (1 - self.p_curriculum)
+                ).bool()
+            else:
+                keep = torch.ones(inputs.shape[0], dtype=torch.bool)
 
             if (epoch + 1) % eval_interval == 0:
                 eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
                 self.log(eval_metrics, type="eval")
 
-            out = self.train_epoch(inputs, targets, max_steps, batch_size)
+            out = self.train_epoch(inputs[keep], targets[keep], max_steps, batch_size)
             self.log(out, type="update")
 
             message = (

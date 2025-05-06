@@ -258,6 +258,8 @@ def main(cfg):
     threshold = torch.tensor(cfg.threshold)
     model.prepare_tensors(lr, weight_decay, threshold)
     model.set_wback(torch.zeros_like(model.W_back))
+    handler.begin_curriculum = 1.0
+    handler.p_curriculum = 0.5
 
     # Fields before phase 1
     if not cfg.skip_fields:
@@ -320,6 +322,8 @@ def main(cfg):
     weight_decay = torch.tensor(cfg.weight_decay)
     threshold = torch.tensor(cfg.threshold)
     model.prepare_tensors(lr, weight_decay, threshold)
+    handler.begin_curriculum = cfg.begin_curriculum
+    handler.p_curriculum = cfg.p_curriculum
 
     # Fields before phase 2
     if not cfg.skip_fields:
@@ -378,6 +382,8 @@ def main(cfg):
     weight_decay = torch.tensor(cfg.weight_decay)
     threshold = torch.tensor(cfg.threshold)
     model.prepare_tensors(lr, weight_decay, threshold)
+    handler.begin_curriculum = cfg.begin_curriculum
+    handler.p_curriculum = cfg.p_curriculum
 
     # Fields before phase 2bis
     if not cfg.skip_fields:
@@ -438,6 +444,8 @@ def main(cfg):
     threshold = torch.tensor(cfg.threshold)
     model.prepare_tensors(lr, weight_decay, threshold)
     model.set_wback(torch.zeros_like(model.W_back))
+    handler.begin_curriculum = cfg.begin_curriculum_tuning
+    handler.p_curriculum = cfg.p_curriculum_tuning
 
     # Final fields before phase 3
     plots_dir = os.path.join(fields_plots_dir, "phase-3")

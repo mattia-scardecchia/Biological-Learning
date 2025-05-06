@@ -236,6 +236,8 @@ def main(cfg):
         cfg.skip_representations,
         cfg.skip_couplings,
         output_dir,
+        cfg.begin_curriculum,
+        cfg.p_curriculum,
     )
 
     fields_plots_dir = os.path.join(output_dir, "fields")

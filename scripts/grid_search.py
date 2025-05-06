@@ -105,6 +105,8 @@ def main(cfg):
             True,
             True,
             output_dir,
+            cfg.begin_curriculum,
+            cfg.p_curriculum,
         )
 
         logs = handler.train_loop(
