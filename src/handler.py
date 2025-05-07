@@ -13,7 +13,7 @@ from src.classifier import Classifier
 class Handler:
     def __init__(
         self,
-        classifier: BatchMeIfUCan | Classifier,
+        classifier: BatchMeIfUCan,
         init_mode: str,
         skip_representations: bool,
         skip_couplings: bool,
@@ -286,6 +286,24 @@ class Handler:
                 self.logs[key] = torch.stack(self.logs[key], dim=0).cpu().numpy()
 
         return self.logs
+
+    def relaxation_trajectory(self, x, y, max_steps, ignore_right):
+        states = []
+        unsats = []
+        state = self.classifier.initialize_state(x, y, self.init_mode)
+        for step in range(max_steps):
+            state, _, unsat = self.classifier.relax(
+                state,
+                max_steps=1,
+                ignore_right=ignore_right,
+            )
+            states.append(state.clone())
+            unsats.append(unsat.clone())
+        states = torch.stack(states, dim=0)  # T, B, L, N
+        states = states.permute(1, 0, 2, 3)  # B, T, L, N
+        unsats = torch.stack(unsats, dim=0)  # T, B, L, N
+        unsats = unsats.permute(1, 0, 2, 3)  # B, T, L, N
+        return states, unsats
 
     def fields_histogram(self, x, y, max_steps=0, ignore_right=0, plot_total=False):
         state = self.classifier.initialize_state(x, y, self.init_mode)
