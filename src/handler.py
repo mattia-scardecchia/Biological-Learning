@@ -79,6 +79,7 @@ class Handler:
         targets: torch.Tensor,
         max_steps: int,
         batch_size: int,
+        shuffle: bool = True,
     ):
         """
         Trains the network for one epoch over the training set.
@@ -91,7 +92,12 @@ class Handler:
         N = self.classifier.N
         metrics = defaultdict(list)
         num_samples = inputs.shape[0]
-        idxs_perm = torch.randperm(num_samples, generator=self.classifier.cpu_generator)
+        if shuffle:
+            idxs_perm = torch.randperm(
+                num_samples, generator=self.classifier.cpu_generator
+            )
+        else:
+            idxs_perm = torch.arange(num_samples)
         input_idx = 0
         while input_idx < num_samples - batch_size + 1:
             batch_idxs = idxs_perm[input_idx : input_idx + batch_size]
