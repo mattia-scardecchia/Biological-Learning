@@ -7,11 +7,12 @@ name: mlp
 experiment_name: mlp_classifier
 seed: 17
 N: 100  # data dimension
-random_features: false  # if true, freeze all layers except the last
+random_features: true  # if true, freeze all layers except the last
+mup: false
 
 # Model parameters
 model:
-  hidden_dims: [100]  # Hidden layer dimensions
+  hidden_dims: [800]  # Hidden layer dimensions
   dropout_rate: 0.0       # Dropout probability
 
 # Dataloader parameters
@@ -21,8 +22,8 @@ dataloader:
 # Optimizer parameters
 optimizer:
   name: "adamw"  # Options: adam, adamw, sgd
-  learning_rate: 0.0005
-  weight_decay: 0
+  learning_rate: 0.001
+  weight_decay: 0.01
 
 # Learning rate scheduler
 scheduler:

@@ -11,6 +11,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from scripts.train import get_data
 from src.mlp import (
     MLPClassifier,
+    MuPClassifier,
     SimpleDataModule,
     get_callbacks,
 )
@@ -33,12 +34,13 @@ def main(cfg: DictConfig):
         eval_inputs,
         eval_targets,
         batch_size=cfg.dataloader.batch_size,
-        num_workers=10,
+        num_workers=0,
     )
     data_module.setup()
 
     # Model
-    model = MLPClassifier(
+    model_cls = MuPClassifier if cfg.mup else MLPClassifier
+    model = model_cls(
         input_dim=data_module.input_dim,
         hidden_dims=cfg.model.hidden_dims,
         num_classes=data_module.num_classes,

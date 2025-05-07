@@ -1,77 +1,23 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+import mup
+import mup.optim
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics
+from mup import MuReadout, set_base_shapes
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader, TensorDataset
 
 logger = logging.getLogger(__name__)
 
 
-class MLPClassifier(pl.LightningModule):
-    """
-    A simple MLP classifier implemented with PyTorch Lightning.
-    """
-
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dims: List[int],
-        num_classes: int,
-        dropout_rate: float = 0.2,
-        learning_rate: float = 0.001,
-        weight_decay: float = 1e-5,
-        optimizer: str = "adam",
-        scheduler: Optional[str] = None,
-        scheduler_params: Optional[Dict[str, Any]] = None,
-        random_features: Optional[bool] = False,
-    ):
-        """
-        Initialize the MLP classifier.
-
-        Args:
-            input_dim: Dimension of input features
-            hidden_dims: List of hidden layer dimensions
-            num_classes: Number of output classes
-            dropout_rate: Dropout probability
-            learning_rate: Learning rate for optimizer
-            weight_decay: Weight decay for optimizer
-            optimizer: Optimizer type ("adam", "sgd", "adamw")
-            scheduler: Learning rate scheduler ("step", "cosine", "plateau", None)
-            scheduler_params: Parameters for the scheduler
-        """
-        super().__init__()
-        self.save_hyperparameters()
-        self.random_features = random_features
-
-        # Build network layers
-        layers = []
-        prev_dim = input_dim
-
-        for i, hidden_dim in enumerate(hidden_dims):
-            linear = nn.Linear(prev_dim, hidden_dim)
-            if self.random_features:
-                for p in linear.parameters():
-                    p.requires_grad = False
-            layers.append(linear)
-            if self.random_features:
-                assert len(hidden_dims) == 1
-                layers.append(nn.Tanh())
-            else:
-                layers.append(nn.ReLU())
-                layers.append(nn.Dropout(dropout_rate))
-            prev_dim = hidden_dim
-
-        # Output layer
-        layers.append(nn.Linear(prev_dim, num_classes))
-
-        self.network = nn.Sequential(*layers)
-
-        # Metrics for tracking
+class BaseClassifier(pl.LightningModule):
+    def __init__(self, num_classes, **kwargs):
+        super().__init__(**kwargs)
         self.train_acc = torchmetrics.Accuracy(
             task="multiclass", num_classes=num_classes
         )
@@ -79,10 +25,6 @@ class MLPClassifier(pl.LightningModule):
         self.test_acc = torchmetrics.Accuracy(
             task="multiclass", num_classes=num_classes
         )
-
-    def forward(self, x):
-        """Forward pass through the network"""
-        return self.network(x)
 
     def _shared_step(self, batch, batch_idx):
         """Common step for training, validation and testing"""
@@ -132,6 +74,82 @@ class MLPClassifier(pl.LightningModule):
         self.log("test_acc", self.test_acc, on_step=False, on_epoch=True)
 
         return loss
+
+
+def instantiate_mlp_classifier(
+    hidden_dims, random_features, dropout_rate, input_dim, num_classes, mup
+):
+    layers = []
+    prev_dim = input_dim
+
+    for i, hidden_dim in enumerate(hidden_dims):
+        linear = nn.Linear(prev_dim, hidden_dim)
+        if random_features:
+            for p in linear.parameters():
+                p.requires_grad = False
+        layers.append(linear)
+        if random_features:
+            assert len(hidden_dims) == 1
+            layers.append(nn.Tanh())
+        else:
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout_rate))
+        prev_dim = hidden_dim
+
+    if mup:
+        layers.append(MuReadout(prev_dim, num_classes))
+    else:
+        layers.append(nn.Linear(prev_dim, num_classes))
+    return nn.Sequential(*layers)
+
+
+class MLPClassifier(BaseClassifier):
+    """
+    A simple MLP classifier implemented with PyTorch Lightning.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: List[int],
+        num_classes: int,
+        dropout_rate: float = 0.2,
+        learning_rate: float = 0.001,
+        weight_decay: float = 1e-5,
+        optimizer: str = "adam",
+        scheduler: Optional[str] = None,
+        scheduler_params: Optional[Dict[str, Any]] = None,
+        random_features: Optional[bool] = False,
+    ):
+        """
+        Initialize the MLP classifier.
+
+        Args:
+            input_dim: Dimension of input features
+            hidden_dims: List of hidden layer dimensions
+            num_classes: Number of output classes
+            dropout_rate: Dropout probability
+            learning_rate: Learning rate for optimizer
+            weight_decay: Weight decay for optimizer
+            optimizer: Optimizer type ("adam", "sgd", "adamw")
+            scheduler: Learning rate scheduler ("step", "cosine", "plateau", None)
+            scheduler_params: Parameters for the scheduler
+        """
+        super().__init__(num_classes)
+        self.save_hyperparameters()
+        self.random_features = random_features
+        self.network = instantiate_mlp_classifier(
+            hidden_dims,
+            random_features,
+            dropout_rate,
+            input_dim,
+            num_classes,
+            mup=False,
+        )
+
+    def forward(self, x):
+        """Forward pass through the network"""
+        return self.network(x)
 
     def configure_optimizers(self):
         """Configure optimizer and learning rate scheduler"""
@@ -200,6 +218,69 @@ class MLPClassifier(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
+class MuPClassifier(BaseClassifier):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: List[int],
+        num_classes: int,
+        dropout_rate: float = 0.2,
+        learning_rate: float = 0.001,
+        weight_decay: float = 1e-5,
+        optimizer: str = "adamw",
+        scheduler: Optional[str] = None,
+        scheduler_params: Optional[Dict[str, Any]] = None,
+        random_features: Optional[bool] = False,
+    ):
+        super().__init__(num_classes)
+        self.save_hyperparameters()
+        self.random_features = random_features
+
+        base_hidden_dims = [800] * len(hidden_dims)
+        base_model = instantiate_mlp_classifier(
+            base_hidden_dims,
+            random_features,
+            dropout_rate,
+            input_dim,
+            num_classes,
+            mup=True,
+        )
+        delta_hidden_dims = [1600] * len(hidden_dims)
+        delta_model = instantiate_mlp_classifier(
+            delta_hidden_dims,
+            random_features,
+            dropout_rate,
+            input_dim,
+            num_classes,
+            mup=True,
+        )
+        model = instantiate_mlp_classifier(
+            hidden_dims,
+            random_features,
+            dropout_rate,
+            input_dim,
+            num_classes,
+            mup=True,
+        )
+        set_base_shapes(model, base_model, delta=delta_model)
+        # for p in model.parameters():
+        #     mup.init.xavier_normal_(p)
+        self.network = model
+
+    def forward(self, x):
+        return self.network(x)
+
+    def configure_optimizers(self):
+        assert self.hparams.optimizer.lower() == "adamw", "Only AdamW is supported"
+        assert self.hparams.scheduler is None, "No scheduler is supported"
+        optimizer = mup.optim.AdamW(
+            self.network.parameters(),
+            lr=self.hparams.learning_rate,
+            weight_decay=self.hparams.weight_decay,
+        )
+        return optimizer
+
+
 class SimpleDataModule(pl.LightningDataModule):
     def __init__(
         self,
@@ -208,7 +289,7 @@ class SimpleDataModule(pl.LightningDataModule):
         eval_inputs,
         eval_targets,
         batch_size,
-        num_workers=1,
+        num_workers,
     ):
         super().__init__()
         self.train_inputs = train_inputs
@@ -230,7 +311,7 @@ class SimpleDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=(self.num_workers > 0),
         )
 
     def val_dataloader(self):
@@ -239,7 +320,7 @@ class SimpleDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=(self.num_workers > 0),
         )
 
     def test_dataloader(self):
