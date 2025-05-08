@@ -76,6 +76,15 @@ class BaseClassifier(pl.LightningModule):
         return loss
 
 
+class Sign(nn.Module):
+    """
+    Sign activation function.
+    """
+
+    def forward(self, x):
+        return torch.sign(x)
+
+
 def instantiate_mlp_classifier(
     hidden_dims, random_features, dropout_rate, input_dim, num_classes, mup
 ):
@@ -90,7 +99,7 @@ def instantiate_mlp_classifier(
         layers.append(linear)
         if random_features:
             assert len(hidden_dims) == 1
-            layers.append(nn.Tanh())
+            layers.append(Sign())
         else:
             layers.append(nn.ReLU())
             layers.append(nn.Dropout(dropout_rate))
