@@ -44,9 +44,9 @@ def sample_couplings(
     H,
     device,
     generator,
-    J_D,
+    J_D_1,
+    J_D_2,
     ferromagnetic: bool = False,
-    is_self_coupling: bool = True,
 ):
     """
     Main diagonal
@@ -56,12 +56,10 @@ def sample_couplings(
     else:
         J = torch.randn(H, H, device=device, generator=generator, dtype=DTYPE)
         J /= torch.sqrt(torch.tensor(H, device=device, dtype=DTYPE))
-    J.fill_diagonal_(J_D.item())
-    if not is_self_coupling:
-        for i in range(N, H):
-            J[i, i] = (
-                0  # longitudinal couplings are only ferromagnetic for a fraction of neurons, to propagate the input
-            )
+    for i in range(N):
+        J[i, i] = J_D_1
+    for i in range(N, H):
+        J[i, i] = J_D_2
     return J
 
 
@@ -162,17 +160,14 @@ class BatchMeIfUCan:
         self.couplings = self.initialize_couplings(
             fc_left=fc_left, fc_right=fc_right
         )  # L+1, H, 3H
+        self.symmetrize_W()
         self.prepare_tensors(lr, weight_decay, threshold)
-        # self.is_learnable = self.build_is_learnable_mask(self.fc_left, self.fc_right)
-        # self.lr = self.build_lr_tensor(lr)
-        # self.weight_decay = self.build_weight_decay_tensor(weight_decay)
-        # self.threshold = threshold.to(self.device)
-        # self.ignore_right_mask = self.build_ignore_right_mask()
 
         logging.info(f"Initialized {self} on device: {self.device}")
         logging.info(
             f"Parameters:\n"
             f"N={N},\n"
+            f"H={H},\n"
             f"C={C},\n"
             f"num_layers={num_layers},\n"
             f"J_D={J_D},\n"
@@ -181,6 +176,14 @@ class BatchMeIfUCan:
             f"lr={lr},\n"
             f"threshold={threshold},\n"
             f"weight_decay={weight_decay}\n"
+            f"lambda_internal={lambda_internal},\n"
+            f"lambda_fc={lambda_fc},\n"
+            f"init_mode={init_mode},\n"
+            f"fc_left={fc_left},\n"
+            f"fc_right={fc_right},\n"
+            f"symmetric_W={symmetric_W},\n"
+            f"device={device},\n"
+            f"seed={seed},\n"
         )
 
     def prepare_tensors(self, lr, weight_decay, threshold):
@@ -189,7 +192,6 @@ class BatchMeIfUCan:
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
         self.ignore_right_mask = self.build_ignore_right_mask()
-        # self.symmetrize_W()
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
@@ -199,22 +201,16 @@ class BatchMeIfUCan:
         J_x = torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
         for i in range(self.N, self.H):
             J_x[i, i] = 0
-        # J_x = (
-        #     sample_couplings(
-        #         self.N,
-        #         self.H,
-        #         self.device,
-        #         self.generator,
-        #         self.lambda_left[0] / self.lambda_fc,
-        #         not fc_left,
-        #         False,
-        #     )
-        #     * self.lambda_fc
-        # )
         couplings_buffer.append(J_x)
         couplings_buffer.append(
             sample_couplings(
-                self.N, self.H, self.device, self.generator, self.J_D, False, True
+                self.N,
+                self.H,
+                self.device,
+                self.generator,
+                self.J_D,
+                self.J_D,
+                False,
             )
             * self.lambda_internal
         )
@@ -225,9 +221,9 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
+                    self.lambda_right[-1] / self.lambda_fc,
                     self.lambda_right[0] / self.lambda_fc,
                     not fc_right,
-                    False,
                 )
                 * self.lambda_fc
             )
@@ -240,15 +236,21 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
+                    self.lambda_left[0] / self.lambda_fc,
                     self.lambda_left[idx] / self.lambda_fc,
                     not fc_left,
-                    False,
                 )
                 * self.lambda_fc
             )
             couplings_buffer.append(
                 sample_couplings(
-                    self.N, self.H, self.device, self.generator, self.J_D, False, True
+                    self.N,
+                    self.H,
+                    self.device,
+                    self.generator,
+                    self.J_D,
+                    self.J_D,
+                    False,
                 )
                 * self.lambda_internal
             )
@@ -258,9 +260,9 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
+                    self.lambda_right[-1] / self.lambda_fc,
                     self.lambda_right[idx] / self.lambda_fc,
                     not fc_right,
-                    False,
                 )
                 * self.lambda_fc
             )
@@ -273,15 +275,21 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
+                    self.lambda_left[0] / self.lambda_fc,
                     self.lambda_left[self.L - 1] / self.lambda_fc,
                     not fc_left,
-                    False,
                 )
                 * self.lambda_fc
             )
             couplings_buffer.append(
                 sample_couplings(
-                    self.N, self.H, self.device, self.generator, self.J_D, False, True
+                    self.N,
+                    self.H,
+                    self.device,
+                    self.generator,
+                    self.J_D,
+                    self.J_D,
+                    False,
                 )
                 * self.lambda_internal
             )
@@ -413,7 +421,9 @@ class BatchMeIfUCan:
         )  # (B, N) -> (B, 1, H)
         if mode == "input":
             neurons = x_padded.repeat(1, L, 1)
-            y_hat = sample_state(C, batch_size, self.device, self.generator)
+            # y_hat = sample_state(C, batch_size, self.device, self.generator)
+            # y_hat = torch.zeros((batch_size, C), device=self.device, dtype=DTYPE)
+            y_hat = y.clone()
         elif mode == "zeros":
             neurons = torch.zeros((batch_size, L, H), device=self.device, dtype=DTYPE)
             y_hat = torch.zeros((batch_size, C), device=self.device, dtype=DTYPE)
