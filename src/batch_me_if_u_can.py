@@ -113,8 +113,10 @@ class BatchMeIfUCan:
         threshold: torch.Tensor,
         weight_decay: torch.Tensor,
         init_mode: str,
+        init_noise: float,
         fc_left: bool,
         fc_right: bool,
+        fc_input: bool,
         symmetric_W: bool,
         device: str = "cpu",
         seed: Optional[int] = None,
@@ -142,10 +144,13 @@ class BatchMeIfUCan:
         self.J_D = torch.tensor(J_D, device=device)
         self.fc_left = fc_left
         self.fc_right = fc_right
+        self.fc_input = fc_input
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
         self.symmetric_W = symmetric_W
         self.init_mode = init_mode
+        self.init_noise = init_noise
+        assert not ("noisy" in self.init_mode and self.init_noise == 0)
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -198,9 +203,25 @@ class BatchMeIfUCan:
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
         # First Layer
-        J_x = torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
-        for i in range(self.N, self.H):
-            J_x[i, i] = 0
+        if self.fc_input:
+            J_x = (
+                sample_couplings(
+                    self.N,
+                    self.H,
+                    self.device,
+                    self.generator,
+                    self.lambda_left[0] / self.lambda_fc,
+                    0,
+                    not fc_left,
+                )
+                * self.lambda_fc
+            )
+        else:
+            J_x = (
+                torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
+            )
+            for i in range(self.N, self.H):
+                J_x[i, i] = 0
         couplings_buffer.append(J_x)
         couplings_buffer.append(
             sample_couplings(
@@ -426,6 +447,18 @@ class BatchMeIfUCan:
             y_hat = y.clone()
         elif mode == "zeros":
             neurons = torch.zeros((batch_size, L, H), device=self.device, dtype=DTYPE)
+            y_hat = torch.zeros((batch_size, C), device=self.device, dtype=DTYPE)
+        elif mode == "noisy_zeros":
+            signs = (
+                torch.randint(0, 2, (batch_size, L, H), device=self.device, dtype=DTYPE)
+                * 2
+                - 1
+            )
+            neurons = torch.where(
+                torch.rand(H, device=self.device, dtype=DTYPE) < self.init_noise,
+                signs,
+                torch.zeros_like(signs, device=self.device, dtype=DTYPE),
+            )
             y_hat = torch.zeros((batch_size, C), device=self.device, dtype=DTYPE)
         else:
             raise ValueError(f"Unknown mode: {mode}")

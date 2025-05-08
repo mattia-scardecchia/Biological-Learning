@@ -219,11 +219,13 @@ def main(cfg):
         "threshold": torch.tensor(threshold),
         "weight_decay": torch.tensor(weight_decay),
         "init_mode": cfg.init_mode,
+        "init_noise": cfg.init_noise,
         "symmetric_W": cfg.symmetric_W,
     }
     if cfg.fc_left or cfg.fc_right:
         model_kwargs["fc_left"] = cfg.fc_left
         model_kwargs["fc_right"] = cfg.fc_right
+        model_kwargs["fc_input"] = cfg.fc_input
         model_kwargs["lambda_fc"] = cfg.lambda_fc
         model_kwargs["H"] = cfg.H
         model_cls = BatchMeIfUCan
