@@ -401,10 +401,13 @@ def plot_couplings_distro_evolution(logs):
     left = logs["left_couplings"]  # shape: (T, L-1, N, N)
     W_forth = logs["W_forth"]  # shape: (T, C, N)
     fig_left, axes_left = create_subplots(L)
+    keep_mask = ~np.eye(
+        left.shape[-1], dtype=bool
+    )  # exclude diagonal cause ferromagnetic couplings are big and ruin the stddev
     for l in range(L - 1):
         means, stds = [], []
         for t in range(T):
-            data = left[t, l].flatten()
+            data = left[t, l][keep_mask].flatten()
             means.append(np.mean(data))
             stds.append(np.std(data))
         ax = axes_left[l]
