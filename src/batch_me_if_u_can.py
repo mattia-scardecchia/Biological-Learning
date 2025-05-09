@@ -594,7 +594,6 @@ class BatchMeIfUCan:
         max_sweeps: int,
     ):
         state = self.initialize_state(x, y, self.init_mode)
-
         if self.double_dynamics:
             # Dynamics with annealing
             first_fixed_point, final_state, num_sweeps, _, unsat = self.double_relax(
@@ -605,22 +604,29 @@ class BatchMeIfUCan:
             final_state, num_sweeps, unsat = self.relax(
                 state, max_sweeps, ignore_right=0
             )
-        if self.double_dynamics and self.double_update:
+        if self.double_update:
             # Double update (J on fixed point with external field, W on the one without it)
-            J_mask = torch.ones_like(self.couplings, device=self.device)
-            J_mask[-1, :, :] = 0  # readout row
-            J_mask[-2, :, 2 * self.H :] = 0  # Wback square
-            made_update = self.perceptron_rule(
-                first_fixed_point,
-                delta_mask=J_mask,
-            )
-            W_mask = torch.zeros_like(self.couplings, device=self.device)
-            W_mask[-1, :, :] = 1  # readout row
-            W_mask[-2, :, 2 * self.H :] = 1  # Wback square
-            self.perceptron_rule(
-                final_state,
-                delta_mask=W_mask,
-            )
+            made_update = self.make_double_update(first_fixed_point, final_state)
+
+            # # Double update for the case without double dynamics
+            # # Note: this does not quite work.
+            # J_mask = torch.ones_like(self.couplings, device=self.device)
+            # J_mask[-1, :, :] = 0  # readout row
+            # J_mask[-2, :, 2 * self.H :] = 0  # Wback square
+            # made_update = self.perceptron_rule(
+            #     final_state,
+            #     delta_mask=J_mask,
+            # )
+            # final_state_inference, _, _ = self.relax(
+            #     state, max_sweeps, ignore_right=4
+            # )
+            # W_mask = torch.zeros_like(self.couplings, device=self.device)
+            # W_mask[-1, :, :] = 1  # readout row
+            # W_mask[-2, :, 2 * self.H :] = 1  # Wback square
+            # self.perceptron_rule(
+            #     final_state_inference,
+            #     delta_mask=W_mask,
+            # )
         else:
             # Simple update
             made_update = self.perceptron_rule(final_state)
@@ -633,6 +639,23 @@ class BatchMeIfUCan:
             "readout_unsat": unsat[:, -1, : self.C],
             "update_states": final_state[:, 1:-2, :],
         }
+
+    def make_double_update(self, J_fixed_point, W_fixed_point):
+        J_mask = torch.ones_like(self.couplings, device=self.device)
+        J_mask[-1, :, :] = 0  # readout row
+        J_mask[-2, :, 2 * self.H :] = 0  # Wback square
+        made_update = self.perceptron_rule(
+            J_fixed_point,
+            delta_mask=J_mask,
+        )
+        W_mask = torch.zeros_like(self.couplings, device=self.device)
+        W_mask[-1, :, :] = 1  # readout row
+        W_mask[-2, :, 2 * self.H :] = 1  # Wback square
+        self.perceptron_rule(
+            W_fixed_point,
+            delta_mask=W_mask,
+        )
+        return made_update
 
     def inference(
         self,
