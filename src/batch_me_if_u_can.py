@@ -107,7 +107,7 @@ class BatchMeIfUCan:
         J_D: float,
         lambda_left: list[float],
         lambda_right: list[float],
-        lambda_internal: float,
+        lambda_internal: float | list[float],
         lambda_fc: float,
         lr: torch.Tensor,
         threshold: torch.Tensor,
@@ -118,6 +118,8 @@ class BatchMeIfUCan:
         fc_right: bool,
         fc_input: bool,
         symmetric_W: bool,
+        double_dynamics: bool,
+        double_update: bool,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -134,6 +136,8 @@ class BatchMeIfUCan:
         """
         assert len(lambda_left) == len(lambda_right) == num_layers + 1
         assert not (lambda_fc == 0 and (fc_left or fc_right))
+        assert not ("noisy" in init_mode and init_noise == 0)
+        assert not (double_update and not double_dynamics)
         assert N <= H
         self.L = num_layers
         self.N = N
@@ -145,12 +149,15 @@ class BatchMeIfUCan:
         self.fc_left = fc_left
         self.fc_right = fc_right
         self.fc_input = fc_input
+        if isinstance(lambda_internal, float):
+            lambda_internal = [lambda_internal] * num_layers
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
         self.symmetric_W = symmetric_W
         self.init_mode = init_mode
         self.init_noise = init_noise
-        assert not ("noisy" in self.init_mode and self.init_noise == 0)
+        self.double_dynamics = double_dynamics
+        self.double_update = double_update
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -196,7 +203,7 @@ class BatchMeIfUCan:
         self.lr = self.build_lr_tensor(lr)
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()
+        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; yes, label and Wback feedback.
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
@@ -233,7 +240,7 @@ class BatchMeIfUCan:
                 self.J_D,
                 False,
             )
-            * self.lambda_internal
+            * self.lambda_internal[0]
         )
         if self.L > 1:  # il L == 1, right couplings will be set later (W_back)
             couplings_buffer.append(
@@ -242,7 +249,7 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_right[-1] / self.lambda_fc,
+                    0,
                     self.lambda_right[0] / self.lambda_fc,
                     not fc_right,
                 )
@@ -273,7 +280,7 @@ class BatchMeIfUCan:
                     self.J_D,
                     False,
                 )
-                * self.lambda_internal
+                * self.lambda_internal[idx]
             )
             couplings_buffer.append(
                 sample_couplings(
@@ -281,7 +288,7 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_right[-1] / self.lambda_fc,
+                    0,
                     self.lambda_right[idx] / self.lambda_fc,
                     not fc_right,
                 )
@@ -312,7 +319,7 @@ class BatchMeIfUCan:
                     self.J_D,
                     False,
                 )
-                * self.lambda_internal
+                * self.lambda_internal[self.L - 1]
             )
         W_initial = sample_readout_weights(self.H, self.C, self.device, self.generator)
         W_back = W_initial.clone() * self.lambda_right[-2] / self.root_C
@@ -390,7 +397,7 @@ class BatchMeIfUCan:
         for idx in range(L):
             lr_tensor[idx, :, :] = lr[idx] / math.sqrt(H)
             if idx < L:
-                lr_tensor[idx, :, H : 2 * H] *= self.lambda_internal
+                lr_tensor[idx, :, H : 2 * H] *= self.lambda_internal[idx]
                 if idx < L - 1:
                     lr_tensor[idx, :, 2 * H : 3 * H] *= (
                         self.lambda_fc
@@ -418,9 +425,13 @@ class BatchMeIfUCan:
 
     def build_ignore_right_mask(self):
         H, L = self.H, self.L
-        mask = torch.ones_like(self.couplings).unsqueeze(0).repeat(2, 1, 1, 1)
-        mask[1, :, :, 2 * H : 3 * H] = 0
-        # mask[1, L - 1, :, 2 * H : 3 * H] = 1  # keep W_back with ignore_right=1
+        mask = torch.ones_like(self.couplings).unsqueeze(0).repeat(5, 1, 1, 1)
+        mask[1, :, :, 2 * H : 3 * H] = 0  # ignore all right fields
+        mask[2, -1, :, 2 * H : 3 * H] = 0  # ignore only label's ferromagnetic field
+        mask[3, -2, :, 2 * H : 3 * H] = 0  # ignore only W_back's feedback
+        mask[4, -2:, :, 2 * H : 3 * H] = (
+            0  # ignore W_back's feedback and label's ferromagnetic field
+        )
         return mask.to(self.device)
 
     def initialize_state(
@@ -521,8 +532,9 @@ class BatchMeIfUCan:
     def perceptron_rule(
         self,
         state: torch.Tensor,
+        delta_mask: Optional[torch.Tensor] = None,
     ):
-        fields = self.local_field(state, ignore_right=1)  # shape (B, L+1, H)
+        fields = self.local_field(state, ignore_right=4)  # shape (B, L+1, H)
         neurons = state[:, 1:-1, :]  # shape (B, L+1, H)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, H)
         is_unstable = (fields * neurons) <= self.threshold[None, :, None]
@@ -533,10 +545,11 @@ class BatchMeIfUCan:
             )
             / math.sqrt(state.shape[0])
         )
+        if delta_mask is not None:
+            delta = delta * delta_mask
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
 
-        # # W_back <- W_forth (with appropriate scaling)
-        self.symmetrize_W()
+        self.symmetrize_W()  # W_back <- W_forth (with appropriate scaling)
         return is_unstable
 
     def relax(
@@ -545,18 +558,34 @@ class BatchMeIfUCan:
         max_steps: int,
         ignore_right: int,
     ):
-        # final_state = relax_kernel(
-        #     state, self.couplings, self.ignore_right_mask[ignore_right], max_steps
-        # )
-        # unsat = self.fraction_unsat(state)
-        # return final_state, max_steps, unsat
         sweeps = 0
         while sweeps < max_steps:
-            sweeps += 1
             fields = self.local_field(state, ignore_right=ignore_right)
+            # logits = state[:, -3] @ self.W_forth.T
             torch.sign(fields, out=state[:, 1:-1, :])
+            # if ignore_right and sweeps >= 2:
+            #     new_readout = F.one_hot(torch.argmax(logits, -1), self.H)
+            #     state[:, -2] = new_readout  # overwrite readout
+            sweeps += 1
         unsat = self.fraction_unsat(state, ignore_right=ignore_right)
         return state, sweeps, unsat
+
+    def double_relax(self, state, max_sweeps):
+        sweeps = 0
+        while sweeps < max_sweeps:
+            fields = self.local_field(state, ignore_right=0)
+            state[:, 1:-1, :] = torch.sign(fields)
+            sweeps += 1
+        fields = self.local_field(state, ignore_right=0)
+        first_unsat = state[:, 1:-1, :] != torch.sign(fields)
+        first_fixed_point = state.clone()
+        while sweeps < 2 * max_sweeps:
+            fields = self.local_field(state, ignore_right=3)
+            state[:, 1:-1, :] = torch.sign(fields)
+            sweeps += 1
+        fields = self.local_field(state, ignore_right=3)
+        second_unsat = state[:, 1:-1, :] != torch.sign(fields)
+        return first_fixed_point, state, sweeps, first_unsat, second_unsat
 
     def train_step(
         self,
@@ -565,8 +594,37 @@ class BatchMeIfUCan:
         max_sweeps: int,
     ):
         state = self.initialize_state(x, y, self.init_mode)
-        final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=0)
-        made_update = self.perceptron_rule(final_state)
+
+        if self.double_dynamics:
+            # Dynamics with annealing
+            first_fixed_point, final_state, num_sweeps, _, unsat = self.double_relax(
+                state, max_sweeps
+            )
+        else:
+            # Simple dynamics
+            final_state, num_sweeps, unsat = self.relax(
+                state, max_sweeps, ignore_right=0
+            )
+        if self.double_dynamics and self.double_update:
+            # Double update (J on fixed point with external field, W on the one without it)
+            J_mask = torch.ones_like(self.couplings, device=self.device)
+            J_mask[-1, :, :] = 0  # readout row
+            J_mask[-2, :, 2 * self.H :] = 0  # Wback square
+            made_update = self.perceptron_rule(
+                first_fixed_point,
+                delta_mask=J_mask,
+            )
+            W_mask = torch.zeros_like(self.couplings, device=self.device)
+            W_mask[-1, :, :] = 1  # readout row
+            W_mask[-2, :, 2 * self.H :] = 1  # Wback square
+            self.perceptron_rule(
+                final_state,
+                delta_mask=W_mask,
+            )
+        else:
+            # Simple update
+            made_update = self.perceptron_rule(final_state)
+
         return {
             "sweeps": num_sweeps,
             "hidden_updates": made_update[:, :-1, :],
@@ -586,7 +644,7 @@ class BatchMeIfUCan:
             torch.zeros((x.shape[0], self.C), device=self.device, dtype=DTYPE),
             self.init_mode,
         )
-        final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=1)
+        final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=4)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
         states, readout = final_state[:, 1:-2], final_state[:, -2]
         return logits, states, readout

@@ -113,6 +113,8 @@ def main(cfg):
             "init_mode": cfg.init_mode,
             "init_noise": cfg.init_noise,
             "symmetric_W": cfg.symmetric_W,
+            "double_dynamics": cfg.double_dynamics,
+            "double_update": cfg.double_update,
         }
         if cfg.fc_left or cfg.fc_right:
             model_kwargs["fc_left"] = cfg.fc_left

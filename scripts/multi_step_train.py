@@ -222,6 +222,8 @@ def main(cfg):
         "init_mode": cfg.init_mode,
         "init_noise": cfg.init_noise,
         "symmetric_W": cfg.symmetric_W,
+        "double_dynamics": cfg.double_dynamics,
+        "double_update": cfg.double_update,
     }
     assert cfg.fc_left or cfg.fc_right
     model_kwargs["fc_left"] = cfg.fc_left
@@ -258,8 +260,9 @@ def main(cfg):
     lr[:-2] = 0.0
     weight_decay = torch.tensor(cfg.weight_decay)
     threshold = torch.tensor(cfg.threshold)
-    model.prepare_tensors(lr, weight_decay, threshold)
-    model.set_wback(torch.zeros_like(model.W_back))
+    model.prepare_tensors(lr, weight_decay, threshold)  # re-create lr tensor
+    model.set_wback(torch.zeros_like(model.W_back))  # no wback feedback
+    model.symmetric_W = False  # otherwise, wforth might be updated
     handler.begin_curriculum = 1.0
     handler.p_curriculum = 0.5
 
@@ -315,8 +318,10 @@ def main(cfg):
                 y,
             )
 
-    # copy wforth into wback
-    model.set_wback(model.wforth2wback(model.W_forth))
+    # copy wforth into wback, and re-set symmetric_W option
+    model.set_wback(model.wforth2wback(model.W_forth))  # because we had set it to 0
+    model.symmetric_W = cfg.symmetric_W
+    model.symmetrize_W()  # for plots with buggy option
 
     # === Phase 2: Train the couplings only, with feedback from the readout ===
     lr = torch.tensor(cfg.lr)
@@ -446,6 +451,7 @@ def main(cfg):
     threshold = torch.tensor(cfg.threshold)
     model.prepare_tensors(lr, weight_decay, threshold)
     model.set_wback(torch.zeros_like(model.W_back))
+    model.symmetric_W = False
     handler.begin_curriculum = cfg.begin_curriculum_tuning
     handler.p_curriculum = cfg.p_curriculum_tuning
 
@@ -538,8 +544,10 @@ def main(cfg):
     ):
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
+        assert cfg.num_epochs_couplings == 0 or cfg.num_epochs_full == 0
+        num_epochs = max(cfg.num_epochs_couplings, cfg.num_epochs_full)
         plot_representation_similarity(
-            logs_2, representations_root_dir, cfg, cfg.num_epochs_couplings
+            logs_2, representations_root_dir, cfg, num_epochs
         )
 
 
