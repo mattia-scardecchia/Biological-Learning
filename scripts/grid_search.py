@@ -44,6 +44,10 @@ def main(cfg):
         "H": cfg.get("H_values", [cfg.H]),
         "J_D": cfg.get("J_D_values", [cfg.J_D]),
         "lambda_wback": cfg.get("lambda_wback_values", [cfg.lambda_wback]),
+        "max_steps": cfg.get("max_steps_values", [cfg.max_steps]),
+        "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold_hidden]),
+        "lr_J": cfg.get("lr_J_values", [cfg.lr_J]),
+        "beta_ce": cfg.get("beta_ce_values", [cfg.beta_ce]),
     }
 
     results_file = os.path.join(output_dir, "grid_search_results.csv")
@@ -68,9 +72,13 @@ def main(cfg):
         # symmetric_W = hyperparams["symmetric_W"]
 
         J_D = hyperparams["J_D"]
-        lambda_right[-2] = hyperparams["lambda_wback"]
         max_steps = hyperparams["max_steps"]
         H = hyperparams["H"]
+        beta_ce = hyperparams["beta_ce"]
+
+        lambda_right[-2] = hyperparams["lambda_wback"]
+        threshold[:-1] = hyperparams["threshold_hidden"]
+        lr[:-2] = hyperparams["lr_J"]
 
         # ================== Model Training ==================
 
@@ -105,7 +113,7 @@ def main(cfg):
             "double_dynamics": cfg.double_dynamics,
             "double_update": cfg.double_update,
             "use_local_ce": cfg.use_local_ce,
-            "beta_ce": cfg.beta_ce,
+            "beta_ce": beta_ce,
             "fc_left": cfg.fc_left,
             "fc_right": cfg.fc_right,
             "fc_input": cfg.fc_input,
