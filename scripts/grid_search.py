@@ -46,8 +46,13 @@ def main(cfg):
         "lambda_wback": cfg.get("lambda_wback_values", [cfg.lambda_wback]),
         "max_steps": cfg.get("max_steps_values", [cfg.max_steps]),
         "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold_hidden]),
+        "threshold_readout": cfg.get(
+            "threshold_readout_values", [cfg.threshold_readout]
+        ),
         "lr_J": cfg.get("lr_J_values", [cfg.lr_J]),
+        "weight_decay_J": cfg.get("weight_decay_J_values", [cfg.weight_decay_J]),
         "beta_ce": cfg.get("beta_ce_values", [cfg.beta_ce]),
+        "double_dynamics": cfg.get("double_dynamics_values", [cfg.double_dynamics]),
     }
 
     results_file = os.path.join(output_dir, "grid_search_results.csv")
@@ -75,10 +80,14 @@ def main(cfg):
         max_steps = hyperparams["max_steps"]
         H = hyperparams["H"]
         beta_ce = hyperparams["beta_ce"]
+        double_dynamics = hyperparams["double_dynamics"]
 
         lambda_right[-2] = hyperparams["lambda_wback"]
-        threshold[:-1] = hyperparams["threshold_hidden"]
-        lr[:-2] = hyperparams["lr_J"]
+        for i in range(0, cfg.num_layers):
+            threshold[i] = hyperparams["threshold_hidden"]
+            lr[i] = hyperparams["lr_J"]
+            weight_decay[i] = hyperparams["weight_decay_J"]
+        threshold[-1] = hyperparams["threshold_readout"]
 
         # ================== Model Training ==================
 
@@ -110,7 +119,7 @@ def main(cfg):
             "init_mode": cfg.init_mode,
             "init_noise": cfg.init_noise,
             "symmetric_W": cfg.symmetric_W,
-            "double_dynamics": cfg.double_dynamics,
+            "double_dynamics": double_dynamics,
             "double_update": cfg.double_update,
             "use_local_ce": cfg.use_local_ce,
             "beta_ce": beta_ce,

@@ -6,12 +6,12 @@
 
 #SBATCH --time=23:00:00
 #SBATCH --partition=compute
-#SBATCH --nodelist=cnode05
+#SBATCH --nodelist=cnode08
 #SBATCH --qos=normal
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=16G
+#SBATCH --mem=64G
 
 
 mkdir -p slurm_logs/output slurm_logs/error
@@ -20,4 +20,4 @@ SEED=${seed:-11}
 echo "Running run.sh with seed=$SEED"
 
 # Grid search
-conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py name=grid seed=$SEED
+conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py name=full-mnist seed=$SEED

@@ -1,5 +1,5 @@
-#!/bin/bash
-# Usage: bash grid.sh --seeds 1,2,3,4,5
+ #!/bin/bash
+# Usage: bash scripts/slurm/schedule_grid.sh --seeds 1,2,3,4,5
 
 # Parse command-line argument for seeds
 while [[ "$#" -gt 0 ]]; do
