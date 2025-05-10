@@ -23,30 +23,6 @@ from src.utils import (
     plot_couplings_histograms,
 )
 
-# HYPERPARAM_GRID = {
-#     "lr_J": [0.05, 0.075, 0.1],
-#     "lr_W": [0.01, 0.02, 0.03],
-#     "threshold": [1.25, 1.5, 1.75],
-#     "weight_decay_J": [0.0, 0.001, 0.01],
-#     "lambda_left": [1.75, 2.0, 2.25],
-#     "lambda_x": [4.0, 5.0],
-#     "J_D": [0.2, 0.3, 0.4],
-#     "num_epochs": [10],
-#     "weight_decay_W": [0.0],
-# }
-HYPERPARAM_GRID = {
-    "lr_wback": [0.0],
-    "lr_wforth": [0.5],
-    "lr_J": [0.05, 0.03, 0.01, 0.005, 0.1],
-    "threshold_hidden": [1.0, 1.5, 2.0, 2.5, 3.0],
-    "threshold_readout": [7.5],
-    "weight_decay_J": [0.02, 0.01, 0.005, 0.05, 0.1],
-    "weight_decay_wback": [0.0],
-    "weight_decay_wforth": [0.005],
-    "lambda_wback": [1.0, 0.5, 1.5],
-    "J_D": [0.5, 0.25],
-}
-
 
 @hydra.main(config_path="../configs", config_name="train", version_base="1.3")
 def main(cfg):
@@ -61,6 +37,15 @@ def main(cfg):
 
     # ================== Begin Grid Search ==================
 
+    # Convention: check if there is a key hp-name_values in cfg.
+    # If not, use the single value of hp-name in cfg.
+    # In any case, always pass the params to the model drawing from HYPERPARAM_GRID.
+    HYPERPARAM_GRID = {
+        "H": cfg.get("H_values", [cfg.H]),
+        "J_D": cfg.get("J_D_values", [cfg.J_D]),
+        "lambda_wback": cfg.get("lambda_wback_values", [cfg.lambda_wback]),
+    }
+
     results_file = os.path.join(output_dir, "grid_search_results.csv")
     header_written = False
     i = 0
@@ -68,19 +53,24 @@ def main(cfg):
         i += 1
         logging.info(f"Starting iteration {i}")
         hyperparams = dict(zip(HYPERPARAM_GRID.keys(), values))
-        lr = [hyperparams["lr_J"]] * cfg.num_layers + [
-            hyperparams["lr_wback"],
-            hyperparams["lr_wforth"],
-        ]
-        threshold = [hyperparams["threshold_hidden"]] * cfg.num_layers + [
-            hyperparams["threshold_readout"]
-        ]
-        weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
-            hyperparams["weight_decay_wback"],
-            hyperparams["weight_decay_wforth"],
-        ]
-        lambda_right[-2] = hyperparams["lambda_wback"]
+
+        # lr = [hyperparams["lr_J"]] * cfg.num_layers + [
+        #     hyperparams["lr_wback"],
+        #     hyperparams["lr_wforth"],
+        # ]
+        # threshold = [hyperparams["threshold_hidden"]] * cfg.num_layers + [
+        #     hyperparams["threshold_readout"]
+        # ]
+        # weight_decay = [hyperparams["weight_decay_J"]] * cfg.num_layers + [
+        #     hyperparams["weight_decay_wback"],
+        #     hyperparams["weight_decay_wforth"],
+        # ]
+        # symmetric_W = hyperparams["symmetric_W"]
+
         J_D = hyperparams["J_D"]
+        lambda_right[-2] = hyperparams["lambda_wback"]
+        max_steps = hyperparams["max_steps"]
+        H = hyperparams["H"]
 
         # ================== Model Training ==================
 
@@ -120,7 +110,7 @@ def main(cfg):
             "fc_right": cfg.fc_right,
             "fc_input": cfg.fc_input,
             "lambda_fc": cfg.lambda_fc,
-            "H": cfg.H,
+            "H": H,
         }
         model_cls = BatchMeIfUCan
         model = model_cls(**model_kwargs)
@@ -156,7 +146,7 @@ def main(cfg):
             cfg.num_epochs,
             train_inputs,
             train_targets,
-            cfg.max_steps,
+            max_steps,
             cfg.batch_size,
             eval_interval=cfg.eval_interval,
             eval_inputs=eval_inputs,
