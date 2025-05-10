@@ -30,20 +30,23 @@ lambda_r: 0.3
 lambda_wback: 1.0  # (/100 if buggy)
 lambda_internal: 1.0
 lambda_fc: 0.0001
+
 symmetric_W: buggy
 double_dynamics: false
 double_update: false
+use_local_ce: false
+beta_ce: 10.0
 
 # Perceptron Rule
 num_epochs: 40
 batch_size: 16
 lr: [0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
-threshold: [1.0, 7.5]                       # perceptron rule. last is for readout layer
+# threshold: [1.0, 7.5]                       # perceptron rule. last is for readout layer
 weight_decay: [0.005, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
 # lr_J: 0.03
 # lr_W: 0.1
-# threshold_hidden: 1.0
-# threshold_readout: 7.5
+threshold_hidden: 1.0
+threshold_readout: 2.5
 # weight_decay_J: 0.005
 # weight_decay_W: 0.005
 

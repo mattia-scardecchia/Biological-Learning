@@ -224,15 +224,15 @@ def main(cfg):
         "symmetric_W": cfg.symmetric_W,
         "double_dynamics": cfg.double_dynamics,
         "double_update": cfg.double_update,
+        "use_local_ce": cfg.use_local_ce,
+        "beta_ce": cfg.beta_ce,
+        "fc_left": cfg.fc_left,
+        "fc_right": cfg.fc_right,
+        "fc_input": cfg.fc_input,
+        "lambda_fc": cfg.lambda_fc,
+        "H": cfg.H,
     }
-    assert cfg.fc_left or cfg.fc_right
-    model_kwargs["fc_left"] = cfg.fc_left
-    model_kwargs["fc_right"] = cfg.fc_right
-    model_kwargs["fc_input"] = cfg.fc_input
-    model_kwargs["lambda_fc"] = cfg.lambda_fc
-    model_kwargs["H"] = cfg.H
     model_cls = BatchMeIfUCan
-
     model = model_cls(**model_kwargs)
     handler = Handler(
         model,

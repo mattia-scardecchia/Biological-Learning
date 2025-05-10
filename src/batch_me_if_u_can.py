@@ -120,6 +120,8 @@ class BatchMeIfUCan:
         symmetric_W: bool,
         double_dynamics: bool,
         double_update: bool,
+        use_local_ce: bool,
+        beta_ce: float,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -158,6 +160,8 @@ class BatchMeIfUCan:
         self.init_noise = init_noise
         self.double_dynamics = double_dynamics
         self.double_update = double_update
+        self.use_local_ce = use_local_ce
+        self.beta_ce = beta_ce
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -537,7 +541,12 @@ class BatchMeIfUCan:
         fields = self.local_field(state, ignore_right=4)  # shape (B, L+1, H)
         neurons = state[:, 1:-1, :]  # shape (B, L+1, H)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, H)
-        is_unstable = (fields * neurons) <= self.threshold[None, :, None]
+        if self.use_local_ce:
+            is_unstable = 1 - torch.sigmoid(
+                self.beta_ce * (fields * neurons - self.threshold[None, :, None])
+            )  # omit a beta_ce factor to decouple slope and lr
+        else:
+            is_unstable = (fields * neurons) <= self.threshold[None, :, None]
         delta = (
             self.lr
             * torch.einsum("bli,blcj->licj", neurons * is_unstable, S_unfolded).flatten(
@@ -560,6 +569,7 @@ class BatchMeIfUCan:
     ):
         sweeps = 0
         while sweeps < max_steps:
+            # state[:, 1:-2, -1] = 1  # set a neuron per layer to 1 to project a bias term
             fields = self.local_field(state, ignore_right=ignore_right)
             # logits = state[:, -3] @ self.W_forth.T
             torch.sign(fields, out=state[:, 1:-1, :])
@@ -568,6 +578,7 @@ class BatchMeIfUCan:
             #     state[:, -2] = new_readout  # overwrite readout
             sweeps += 1
         unsat = self.fraction_unsat(state, ignore_right=ignore_right)
+        # state[:, 1:-2, -1] = 1  # bias term
         return state, sweeps, unsat
 
     def double_relax(self, state, max_sweeps):
