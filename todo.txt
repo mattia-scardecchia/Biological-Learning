@@ -1,12 +1,13 @@
 TODO:
 
+- our weight decay strat hinders learning. maybe smooth l1? boh
 - Test in notebook with a single wide hidden layer!
-    - sanity checks:
-        - ensure healthy histograms (in regime i care about, i.e. H=1000)
     - readout weights:
-        - keep as is (symmetric but independent, both learning steps)
+        - initialize symmetric but make independent copies, both learn
+        - initialize symmetric but keep wback fixed (lr 0)
         - make symmetric and learn only with W_forth step
     - how big should all multipliers/fields be?
+    - init zeros/input?
     - relative learning speed of readut weights and couplings:
         - different learning rates?
         - initial warmup with frozen couplings?

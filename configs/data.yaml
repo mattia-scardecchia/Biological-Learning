@@ -1,6 +1,6 @@
 data:
   dataset: 'mnist'  # 'synthetic', 'mnist', 'cifar', 'hm'
-  P: 1000               # train patterns per class
+  P: 600               # train patterns per class
   P_eval: 300           # eval patterns per class
   synthetic:
     C: 10             

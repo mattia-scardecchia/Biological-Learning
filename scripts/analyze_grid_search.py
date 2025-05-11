@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 
 # -------------------- Configuration --------------------
-BASE_DIR = "data/grid-search-18-03/sparsity 1.0"
-THRESHOLD_VALUE = 0.5
-ACCURACY_TYPE = "max_eval_acc"
+BASE_DIR = "data/grid-simple/full-mnist/constant 2"
+THRESHOLD_VALUE = 0.80
+ACCURACY_TYPE = "final_train_acc"
 HIST_BINS = 10
 
 
@@ -45,7 +45,7 @@ def load_data(base_dir: str):
         if "acc" not in c and c not in ["lambda_right", "lambda_y"]
     ]
     df = pd.concat(dfs, axis=0).set_index(index_columns)
-    df = df.drop(columns=["lambda_right", "lambda_y"])
+    # df = df.drop(columns=["lambda_right", "lambda_y"])
     return df, index_columns
 
 
