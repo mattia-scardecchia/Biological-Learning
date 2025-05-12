@@ -153,6 +153,8 @@ class BatchMeIfUCan:
         self.fc_input = fc_input
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
+        if isinstance(lambda_fc, float):
+            lambda_fc = [lambda_fc] * num_layers
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
         self.symmetric_W = symmetric_W
@@ -227,11 +229,11 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc,
+                    self.lambda_left[0] / self.lambda_fc[0],
                     0,
                     not fc_left,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[0]
             )
         else:
             J_x = (
@@ -260,10 +262,10 @@ class BatchMeIfUCan:
                     self.device,
                     self.generator,
                     0,
-                    self.lambda_right[0] / self.lambda_fc,
+                    self.lambda_right[0] / self.lambda_fc[0],
                     not fc_right,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[0]
             )
 
         # Middle Layers
@@ -274,11 +276,11 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc,
-                    self.lambda_left[idx] / self.lambda_fc,
+                    self.lambda_left[0] / self.lambda_fc[idx],
+                    self.lambda_left[idx] / self.lambda_fc[idx],
                     not fc_left,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[idx]
             )
             couplings_buffer.append(
                 sample_couplings(
@@ -299,10 +301,10 @@ class BatchMeIfUCan:
                     self.device,
                     self.generator,
                     0,
-                    self.lambda_right[idx] / self.lambda_fc,
+                    self.lambda_right[idx] / self.lambda_fc[idx],
                     not fc_right,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[idx]
             )
 
         # Last Layer
@@ -313,11 +315,11 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc,
-                    self.lambda_left[self.L - 1] / self.lambda_fc,
+                    self.lambda_left[0] / self.lambda_fc[self.L - 1],
+                    self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
                     not fc_left,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[self.L - 1]
             )
             couplings_buffer.append(
                 sample_couplings(
@@ -409,13 +411,13 @@ class BatchMeIfUCan:
             if idx < L:
                 lr_tensor[idx, :, H : 2 * H] *= self.lambda_internal[idx]
                 if idx < L - 1:
-                    lr_tensor[idx, :, 2 * H : 3 * H] *= (
-                        self.lambda_fc
-                    )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
-                if idx > 0:
-                    lr_tensor[idx, :, :H] *= (
-                        self.lambda_fc
-                    )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
+                    lr_tensor[idx, :, 2 * H : 3 * H] *= self.lambda_fc[
+                        idx
+                    ]  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
+                if idx > 0 or (idx == 0 and self.fc_input):
+                    lr_tensor[idx, :, :H] *= self.lambda_fc[
+                        idx
+                    ]  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
         lr_tensor[L - 1, :, 2 * H : 2 * H + C] = (
             lr[-2] * self.lambda_right[-2] / math.sqrt(C)
         )  # overwrite W_back
