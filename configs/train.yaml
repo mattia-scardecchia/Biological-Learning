@@ -16,36 +16,36 @@ H: 400
 num_layers: 3
 J_D: 0.5
 max_steps: 5                                   # full sweeps over the network (relaxation)
-init_mode: "zeros"                             # "input", "zeros", "noisy_zeros"
+init_mode: "input"                             # "input", "zeros", "noisy_zeros"
 init_noise: 0.0
 fc_left: true
 fc_right: false
 fc_input: false
-# lambda_left: [6.0, 4.0, 4.0, 4.0, 4.0, 1.0]     # first is lambda_x, last affects the readout layer
-# lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 6.0]  # last is lambda_y, last but one affects the readout layer
+lambda_left: [1000.0, 2.0, 2.0, 1.0]     # first is lambda_x, last affects the readout layer
+lambda_right: [2.0, 2.0, 10.0, 1000.0]  # last is lambda_y, last but one affects the readout layer
 lambda_x: 1000.0
 lambda_y: 1000.0
-lambda_l: 0.3
-lambda_r: 0.3
+# lambda_l: 1.0
+# lambda_r: 1.0
 lambda_wback: 3.0  # (/100 if buggy)
 lambda_internal: 1.0
 lambda_fc: 0.0001
 
 symmetric_W: buggy
-double_dynamics: false
+double_dynamics: true
 double_update: false
 use_local_ce: false
 beta_ce: 10.0
 
 # Perceptron Rule
-num_epochs: 40
+num_epochs: 20
 batch_size: 16
 # lr: [0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
 # threshold: [1.0, 3.0]                       # perceptron rule. last is for readout layer
 # weight_decay: [0.01, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
 lr_J: 0.03
 lr_W: 0.1
-threshold_hidden: 1.0
+threshold_hidden: 3.0
 threshold_readout: 7.5
 weight_decay_J: 0.005
 weight_decay_W: 0.005
