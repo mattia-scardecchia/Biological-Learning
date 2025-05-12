@@ -531,6 +531,10 @@ class BatchMeIfUCan:
                 / self.lambda_left[-1]
                 / 100
             )
+        elif self.symmetric_W == "sign":
+            self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+                torch.sign(self.W_forth.T) * self.lambda_right[-2] / self.root_C
+            )
         elif self.symmetric_W:
             norm_old = self.W_back.norm(dim=1)
             self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
