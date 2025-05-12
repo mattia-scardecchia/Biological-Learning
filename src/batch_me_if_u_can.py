@@ -215,11 +215,16 @@ class BatchMeIfUCan:
         self.lr = self.build_lr_tensor(lr)
         self.weight_decay = self.build_weight_decay_tensor(weight_decay)
         self.threshold = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; yes, label and Wback feedback.
+        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
+        self.lambda_cylinder = 0  # ferromagnetic coupling between cylinder neurons
+        self.lambda_wback_skip = torch.tensor([1.0], device=self.device)
+        self.lambda_wforth_skip = torch.tensor([1.0], device=self.device)
+        self.lr_wforth_skip = torch.tensor([0.1], device=self.device)
+        self.weight_decay_wforth_skip = torch.tensor([0.005], device=self.device)
 
         # First Layer
         if self.fc_input:
@@ -261,7 +266,7 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    0,
+                    self.lambda_cylinder / self.lambda_fc[0],
                     self.lambda_right[0] / self.lambda_fc[0],
                     not fc_right,
                 )
@@ -276,7 +281,7 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc[idx],
+                    self.lambda_cylinder / self.lambda_fc[idx],
                     self.lambda_left[idx] / self.lambda_fc[idx],
                     not fc_left,
                 )
@@ -300,7 +305,7 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    0,
+                    self.lambda_cylinder / self.lambda_fc[idx],
                     self.lambda_right[idx] / self.lambda_fc[idx],
                     not fc_right,
                 )
@@ -315,7 +320,7 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc[self.L - 1],
+                    self.lambda_cylinder / self.lambda_fc[self.L - 1],
                     self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
                     not fc_left,
                 )
@@ -377,6 +382,24 @@ class BatchMeIfUCan:
                 torch.cat(couplings_buffer[i * 3 : (i + 1) * 3], dim=1)
                 for i in range(self.L + 1)
             ]
+        )
+
+        # define skip connections, their learning rates and weight decay tensors
+        self.Wback_skip = (
+            W_back.clone().repeat(self.L - 1, 1, 1) * self.lambda_wback_skip
+        )
+        self.Wforth_skip = (
+            W_forth.clone().repeat(self.L - 1, 1, 1) * self.lambda_wforth_skip
+        )
+        self.lr_Wback_skip = torch.zeros_like(self.Wback_skip)
+        self.lr_Wforth_skip = (
+            torch.ones_like(self.Wforth_skip, device=self.device)
+            * self.lr_wforth_skip
+            * self.lambda_wforth_skip
+            / self.root_H
+        )
+        self.weight_decay_Wforth_skip = (
+            self.lr_Wforth_skip * self.weight_decay_wforth_skip
         )
 
         return couplings.to(self.device)
@@ -517,11 +540,19 @@ class BatchMeIfUCan:
         state_unfolded = (
             state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)
         )  # Shape: (B, L+1, 3*H)
-        return torch.einsum(
+        fields = torch.einsum(
             "lni,bli->bln",
             self.couplings * self.ignore_right_mask[ignore_right],
             state_unfolded,
         )
+        if ignore_right in [0, 2]:
+            fields[:, :-1, :] += torch.einsum(
+                "lhc,bc->blh", self.Wback_skip, state[:, -2, : self.C]
+            )
+        fields[:, -1, : self.C] += torch.einsum(
+            "lch,blh->bc", self.Wforth_skip, state[:, 1:-3, :]
+        )
+        return fields
 
     def symmetrize_W(self):
         if self.symmetric_W == "buggy":
@@ -533,11 +564,21 @@ class BatchMeIfUCan:
                 / self.lambda_left[-1]
                 / 100
             )
+            self.Wback_skip = (
+                self.Wforth_skip.transpose(1, 2)
+                * self.root_H
+                * self.lambda_wback_skip
+                / self.root_C
+                / self.lambda_wforth_skip
+                / 100
+            )
         elif self.symmetric_W:
             norm_old = self.W_back.norm(dim=1)
             self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
                 self.W_forth / self.W_forth.norm(dim=0)[None, :]
             ).T * norm_old[:, None]
+
+            assert 0, "implement!"
         else:
             pass
 
@@ -565,6 +606,19 @@ class BatchMeIfUCan:
         if delta_mask is not None:
             delta = delta * delta_mask
         self.couplings = self.couplings * (1 - self.weight_decay) + delta
+
+        delta_skip = (
+            self.lr_Wforth_skip
+            * torch.einsum(
+                "bc,blh->lch",
+                neurons[:, -1, : self.C] * is_unstable[:, -1, : self.C],
+                state[:, 1:-3, :],
+            )
+            / math.sqrt(state.shape[0])
+        )
+        self.Wforth_skip = (
+            self.Wforth_skip * (1 - self.weight_decay_Wforth_skip) + delta_skip
+        )
 
         self.symmetrize_W()  # W_back <- W_forth (with appropriate scaling)
         return is_unstable
@@ -688,6 +742,7 @@ class BatchMeIfUCan:
         )
         final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=4)
         logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
+        logits += torch.einsum("lch,blh->bc", self.Wforth_skip, final_state[:, 1:-3, :])
         states, readout = final_state[:, 1:-2], final_state[:, -2]
         return logits, states, readout
 
