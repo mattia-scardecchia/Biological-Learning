@@ -230,6 +230,11 @@ def main(cfg):
         "fc_right": cfg.fc_right,
         "fc_input": cfg.fc_input,
         "lambda_fc": cfg.lambda_fc,
+        "lambda_cylinder": cfg.lambda_cylinder,
+        "lambda_wback_skip": cfg.lambda_wback_skip,
+        "lambda_wforth_skip": cfg.lambda_wforth_skip,
+        "lr_wforth_skip": cfg.lr_wforth_skip,
+        "weight_decay_wforth_skip": cfg.weight_decay_wforth_skip,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan

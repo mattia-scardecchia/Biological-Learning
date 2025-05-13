@@ -122,6 +122,11 @@ class BatchMeIfUCan:
         double_update: bool,
         use_local_ce: bool,
         beta_ce: float,
+        lambda_cylinder: float,
+        lambda_wback_skip: float,
+        lambda_wforth_skip: float,
+        lr_wforth_skip: float,
+        weight_decay_wforth_skip: float,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -164,6 +169,13 @@ class BatchMeIfUCan:
         self.double_update = double_update
         self.use_local_ce = use_local_ce
         self.beta_ce = beta_ce
+        self.lambda_cylinder = torch.tensor(lambda_cylinder, device=device)
+        self.lambda_wback_skip = torch.tensor(lambda_wback_skip, device=device)
+        self.lambda_wforth_skip = torch.tensor(lambda_wforth_skip, device=device)
+        self.lr_wforth_skip = torch.tensor(lr_wforth_skip, device=device)
+        self.weight_decay_wforth_skip = torch.tensor(
+            weight_decay_wforth_skip, device=device
+        )
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -220,11 +232,6 @@ class BatchMeIfUCan:
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
-        self.lambda_cylinder = 0  # ferromagnetic coupling between cylinder neurons
-        self.lambda_wback_skip = torch.tensor([1.0], device=self.device)
-        self.lambda_wforth_skip = torch.tensor([1.0], device=self.device)
-        self.lr_wforth_skip = torch.tensor([0.1], device=self.device)
-        self.weight_decay_wforth_skip = torch.tensor([0.005], device=self.device)
 
         # First Layer
         if self.fc_input:
@@ -386,10 +393,14 @@ class BatchMeIfUCan:
 
         # define skip connections, their learning rates and weight decay tensors
         self.Wback_skip = (
-            W_back.clone().repeat(self.L - 1, 1, 1) * self.lambda_wback_skip
+            W_back.clone().repeat(self.L - 1, 1, 1)
+            / self.lambda_right[-2]
+            * self.lambda_wback_skip
         )
         self.Wforth_skip = (
-            W_forth.clone().repeat(self.L - 1, 1, 1) * self.lambda_wforth_skip
+            W_forth.clone().repeat(self.L - 1, 1, 1)
+            / self.lambda_left[-1]
+            * self.lambda_wforth_skip
         )
         self.lr_Wback_skip = torch.zeros_like(self.Wback_skip)
         self.lr_Wforth_skip = (
@@ -546,7 +557,7 @@ class BatchMeIfUCan:
             state_unfolded,
         )
         if ignore_right in [0, 2]:
-            fields[:, :-1, :] += torch.einsum(
+            fields[:, :-2, :] += torch.einsum(
                 "lhc,bc->blh", self.Wback_skip, state[:, -2, : self.C]
             )
         fields[:, -1, : self.C] += torch.einsum(
