@@ -47,9 +47,11 @@ def sample_couplings(
     J_D_1,
     J_D_2,
     ferromagnetic: bool = False,
+    zero_out_cylinder_contribution: bool = False,
 ):
     """
-    Main diagonal
+    :param zero_out_cylinder_contribution: if True, the coupligs in the left rectangle
+    of size (H, N) (drawing from neurons in the cylinder) are set to 0.
     """
     if ferromagnetic:
         J = torch.zeros((H, H), device=device, dtype=DTYPE)
@@ -60,6 +62,8 @@ def sample_couplings(
         J[i, i] = J_D_1
     for i in range(N, H):
         J[i, i] = J_D_2
+    if zero_out_cylinder_contribution:
+        J[:H, :N] = 0
     return J
 
 
@@ -176,6 +180,7 @@ class BatchMeIfUCan:
         self.weight_decay_wforth_skip = torch.tensor(
             weight_decay_wforth_skip, device=device
         )
+        self.zero_out_cylinder_contribution = False
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
@@ -276,6 +281,7 @@ class BatchMeIfUCan:
                     self.lambda_cylinder / self.lambda_fc[0],
                     self.lambda_right[0] / self.lambda_fc[0],
                     not fc_right,
+                    self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[0]
             )
@@ -291,6 +297,7 @@ class BatchMeIfUCan:
                     self.lambda_cylinder / self.lambda_fc[idx],
                     self.lambda_left[idx] / self.lambda_fc[idx],
                     not fc_left,
+                    self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[idx]
             )
@@ -315,6 +322,7 @@ class BatchMeIfUCan:
                     self.lambda_cylinder / self.lambda_fc[idx],
                     self.lambda_right[idx] / self.lambda_fc[idx],
                     not fc_right,
+                    self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[idx]
             )
@@ -330,6 +338,7 @@ class BatchMeIfUCan:
                     self.lambda_cylinder / self.lambda_fc[self.L - 1],
                     self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
                     not fc_left,
+                    self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[self.L - 1]
             )
@@ -430,10 +439,14 @@ class BatchMeIfUCan:
                 mask[idx, :N, :N].fill_diagonal_(0)
                 if not fc_left:
                     mask[idx, :, :H] = 0
+                if self.zero_out_cylinder_contribution:
+                    mask[idx, :H, :N] = 0
             if idx < L - 1:
                 mask[idx, :N, 2 * H : 2 * H + N].fill_diagonal_(0)
                 if not fc_right:
                     mask[idx, :, 2 * H : 3 * H] = 0
+                if self.zero_out_cylinder_contribution:
+                    mask[idx, :H, 2 * H : 2 * H + N] = 0
 
         return mask.to(self.device).to(torch.bool)
 
