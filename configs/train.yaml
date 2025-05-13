@@ -14,7 +14,7 @@ device: 'mps'
 N: 100
 H: 400
 num_layers: 2
-J_D: 0.5
+J_D: 0.3
 max_steps: 5                                   # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros", "noisy_zeros"
 init_noise: 0.0
@@ -32,7 +32,7 @@ lambda_internal: 1.0
 lambda_fc: 0.00001
 
 symmetric_W: buggy
-double_dynamics: true
+double_dynamics: false
 double_update: false
 use_local_ce: false
 beta_ce: 10.0
@@ -46,7 +46,7 @@ batch_size: 16
 lr_J: 0.03
 lr_W: 0.0
 threshold_hidden: 1.0
-threshold_readout: 7.5
+threshold_readout: 3.0
 weight_decay_J: 0.005
 weight_decay_W: 0.005
 
