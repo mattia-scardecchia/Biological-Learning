@@ -287,10 +287,11 @@ class Handler:
 
         return self.logs
 
-    def relaxation_trajectory(self, x, y, max_steps, ignore_right):
+    def relaxation_trajectory(self, x, y, max_steps, ignore_right, state=None):
         states = []
         unsats = []
-        state = self.classifier.initialize_state(x, y, self.init_mode)
+        if state is None:
+            state = self.classifier.initialize_state(x, y, self.init_mode)
         for step in range(max_steps):
             state, _, unsat = self.classifier.relax(
                 state,
