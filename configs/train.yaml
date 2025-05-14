@@ -33,7 +33,7 @@ lambda_internal: 1.0
 
 # Multi-layer
 lambda_fc: 1.0
-lambda_cylinder: 1000.0
+lambda_cylinder: 1000.0  # can also be 0.0
 lambda_wback_skip: 1.0
 lambda_wforth_skip: 1.0
 lr_wforth_skip: 0.1
