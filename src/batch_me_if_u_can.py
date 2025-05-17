@@ -578,6 +578,10 @@ class BatchMeIfUCan:
         ignore_right: int,
     ):
         sweeps = 0
+        # warmup_steps = self.L + 1
+        # for _ in range(warmup_steps):
+        #     fields = self.local_field(state, ignore_right=4)
+        #     torch.sign(fields, out=state[:, 1:-1, :])
         while sweeps < max_steps:
             # state[:, 1:-2, -1] = 1  # set a neuron per layer to 1 to project a bias term
             fields = self.local_field(state, ignore_right=ignore_right)
@@ -625,6 +629,9 @@ class BatchMeIfUCan:
             final_state, num_sweeps, unsat = self.relax(
                 state, max_sweeps, ignore_right=0
             )
+            # for _ in range(max_sweeps):
+            #     fields = self.local_field(state, ignore_right=3)
+            #     final_state[:, 1:-1, :] = torch.sign(fields)
         if self.double_update:
             # Double update (J on fixed point with external field, W on the one without it)
             made_update = self.make_double_update(first_fixed_point, final_state)
