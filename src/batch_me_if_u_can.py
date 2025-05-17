@@ -158,6 +158,9 @@ class BatchMeIfUCan:
         assert not ("noisy" in init_mode and init_noise == 0)
         assert not (double_update and not double_dynamics)
         assert N <= H
+        if lr[-2] != 0:
+            logging.warning("Detected lr of wback != 0. Setting it to 0")
+            lr[-2] = 0
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
         if isinstance(lambda_fc, float):
@@ -721,13 +724,31 @@ class BatchMeIfUCan:
                 / self.lambda_wforth_skip[:, None, None]
                 / 100
             )
-        elif self.symmetric_W:
-            norm_old = self.W_back.norm(dim=1)
+        elif self.symmetric_W == "normalize":
+            norm_old = self.W_back.norm(dim=0).mean()  # (C,)
             self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
-                self.W_forth / self.W_forth.norm(dim=0)[None, :]
-            ).T * norm_old[:, None]
+                self.W_forth / self.W_forth.norm(dim=1)[:, None]
+            ).T * norm_old[None, None]
 
-            assert 0, "implement!"
+            norm_old = self.Wback_skip.norm(dim=1).mean(dim=1)  # (L-1, C)
+            self.Wback_skip = (
+                self.Wforth_skip / self.Wforth_skip.norm(dim=2)[:, :, None]
+            ).transpose(1, 2) * norm_old[:, None, None]
+        elif self.symmetric_W:
+            self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+                self.W_forth.T
+                * self.root_H
+                * self.lambda_right[-2]
+                / self.root_C
+                / self.lambda_left[-1]
+            )
+            self.Wback_skip = (
+                self.Wforth_skip.transpose(1, 2)
+                * self.root_H
+                * self.lambda_wback_skip[:, None, None]
+                / self.root_C
+                / self.lambda_wforth_skip[:, None, None]
+            )
         else:
             pass
 
@@ -917,11 +938,12 @@ class BatchMeIfUCan:
             self.init_mode,
         )
         final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=4)
-        logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
-        logits += torch.einsum("lch,blh->bc", self.Wforth_skip, final_state[:, 1:-3, :])
-        logits += torch.einsum(
-            "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
-        )
+        logits = self.local_field(final_state, ignore_right=4)[:, -1, : self.C]
+        # logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
+        # logits += torch.einsum("lch,blh->bc", self.Wforth_skip, final_state[:, 1:-3, :])
+        # logits += torch.einsum(
+        #     "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
+        # )
         states, readout = final_state[:, 1:-2], final_state[:, -2]
         return logits, states, readout
 

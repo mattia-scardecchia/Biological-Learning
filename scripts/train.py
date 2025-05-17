@@ -182,7 +182,9 @@ def parse_config(cfg):
     try:
         lambda_left = cfg.lambda_left
     except Exception:
-        lambda_left = [cfg.lambda_x] + [cfg.lambda_l] * (cfg.num_layers - 1) + [1.0]
+        lambda_left = (
+            [cfg.lambda_x] + [cfg.lambda_l] * (cfg.num_layers - 1) + [cfg.lambda_wforth]
+        )
     try:
         lambda_right = cfg.lambda_right
     except Exception:
