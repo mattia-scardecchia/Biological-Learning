@@ -18,18 +18,18 @@ J_D: 0.5
 max_steps: 4                                   # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros", "noisy_zeros"
 init_noise: 0.0
-lambda_left: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]     # first is lambda_x, last affects the readout layer
-lambda_right: [0.0, 0.0, 0.0, 0.0, 0.25, 1000.0]  # last is lambda_y, last but one affects the readout layer
+lambda_left: [0.0, 1.5, 1.5, 1.5, 1.5, 1.0]     # first is lambda_x, last affects the readout layer
+lambda_right: [0.0, 0.0, 0.0, 0.0, 0.35, 1000.0]  # last is lambda_y, last but one affects the readout layer
 # lambda_x: 0.0
 # lambda_y: 1000.0
 # lambda_l: 2.0
 # lambda_r: 2.0
 
-lambda_wback_skip: [0.05, 0.1, 0.15, 0.2]
+lambda_wback_skip: [0.05, 0.125, 0.2, 0.275]
 # lambda_wback: 0.15  # (/100 if buggy)
 lambda_input_skip: [0.9, 0.7, 0.5, 0.3, 0.1]
 lambda_input_output_skip: 0.5  # multiplied by L
-lambda_wforth_skip: [1.0, 1.0, 1.0, 1.0]
+lambda_wforth_skip: [0.2, 0.4, 0.6, 0.8]
 # lambda_wforth: 1.0
 
 lr_wforth_skip: 0.1
