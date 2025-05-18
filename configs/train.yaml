@@ -22,11 +22,11 @@ init_noise: 0.0
 # lambda_right: [1.0, 2.0, 1000.0]  # last is lambda_y, last but one affects the readout layer
 lambda_x: 0.0
 lambda_y: 1000.0
-lambda_l: 0.0
+lambda_l: 2.0
 lambda_r: 0.0
 
-lambda_wback_skip: [0.1, 0.1]
-lambda_wback: 0.1  # (/100 if buggy)
+lambda_wback_skip: [0.05, 0.1]
+lambda_wback: 0.2  # (/100 if buggy)
 lambda_input_skip: [0.5, 0.5, 0.5]
 lambda_input_output_skip: 0.5  # multiplied by L
 lambda_wforth_skip: [1.0, 1.0]
@@ -39,12 +39,12 @@ weight_decay_input_skip: 0.005
 lr_input_output_skip: 0.1
 weight_decay_input_output_skip: 0.005
 
-fc_left: false
+fc_left: true
 fc_right: false
 fc_input: false
 lambda_internal: 1.0
 lambda_fc: 1.0
-symmetric_W: true
+symmetric_W: normalize
 double_dynamics: false
 double_update: false
 use_local_ce: false
@@ -52,7 +52,7 @@ beta_ce: 10.0
 lambda_cylinder: null
 
 # Perceptron Rule
-num_epochs: 50
+num_epochs: 40
 batch_size: 16
 # lr: [0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
 # threshold: [1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
