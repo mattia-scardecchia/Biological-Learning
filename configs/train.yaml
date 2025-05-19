@@ -12,43 +12,57 @@ device: 'mps'
 
 # Network and Relaxation
 N: 100
-H: 400
-num_layers: 1
+H: 300
+num_layers: 5
 J_D: 0.5
-max_steps: 5                                   # full sweeps over the network (relaxation)
+max_steps: 4                                   # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros", "noisy_zeros"
 init_noise: 0.0
+lambda_left: [0.0, 2.0, 2.0, 2.0, 2.0, 1.0]     # first is lambda_x, last affects the readout layer
+lambda_right: [0.0, 0.0, 0.0, 0.0, 0.25, 1000.0]  # last is lambda_y, last but one affects the readout layer
+# lambda_x: 0.0
+# lambda_y: 1000.0
+# lambda_l: 2.0
+# lambda_r: 2.0
+
+lambda_wback_skip: [0.05, 0.1, 0.15, 0.2]
+# lambda_wback: 0.15  # (/100 if buggy)
+lambda_input_skip: [0.9, 0.7, 0.5, 0.3, 0.1]
+lambda_input_output_skip: 0.0  # multiplied by L
+lambda_wforth_skip: [0.2, 0.4, 0.6, 0.8]
+# lambda_wforth: 1.0
+
+lr_wforth_skip: 0.1
+weight_decay_wforth_skip: 0.005
+lr_input_skip: 0.03
+weight_decay_input_skip: 0.005
+lr_input_output_skip: 0.1
+weight_decay_input_output_skip: 0.005
+
 fc_left: true
 fc_right: false
 fc_input: false
-# lambda_left: [6.0, 4.0, 4.0, 4.0, 4.0, 1.0]     # first is lambda_x, last affects the readout layer
-# lambda_right: [4.0, 4.0, 4.0, 4.0, 1.0, 6.0]  # last is lambda_y, last but one affects the readout layer
-lambda_x: 1000.0
-lambda_y: 1000.0
-lambda_l: 0.3
-lambda_r: 0.3
-lambda_wback: 1.0  # (/100 if buggy)
 lambda_internal: 1.0
-lambda_fc: 0.0001
-
-symmetric_W: buggy
+lambda_fc: 1.0
+symmetric_W: normalize
 double_dynamics: false
 double_update: false
 use_local_ce: false
 beta_ce: 10.0
+lambda_cylinder: null
 
 # Perceptron Rule
 num_epochs: 20
 batch_size: 16
-lr: [0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
-# threshold: [1.0, 3.0]                       # perceptron rule. last is for readout layer
-weight_decay: [0.01, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
-# lr_J: 0.03
-# lr_W: 0.1
-threshold_hidden: 1.0
-threshold_readout: 3.0
-# weight_decay_J: 0.01
-# weight_decay_W: 0.005
+# lr: [0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
+# threshold: [1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
+# weight_decay: [0.01, 0.01, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
+lr_J: 0.03
+lr_W: 0.1
+threshold_hidden: 1.2
+threshold_readout: 4.0
+weight_decay_J: 0.005
+weight_decay_W: 0.005
 
 begin_curriculum: 1.0  # in [0,1). if >= 1, no curriculum
 p_curriculum: 0.5

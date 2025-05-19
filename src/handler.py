@@ -326,12 +326,10 @@ class Handler:
 
         # Hidden layers
         for idx, ax in enumerate(axs.flatten()[: self.classifier.L]):
-            internal = field_breakdown["internal"][:, idx].cpu()
-            left = field_breakdown["left"][:, idx].cpu()
-            right = field_breakdown["right"][:, idx].cpu()
-            total = field_breakdown["total"][:, idx].cpu()
-            if idx == 0:
-                total = total - left
+            internal = field_breakdown["internal"][:, idx, self.classifier.N :].cpu()
+            left = field_breakdown["left"][:, idx, self.classifier.N :].cpu()
+            right = field_breakdown["right"][:, idx, self.classifier.N :].cpu()
+            total = field_breakdown["total"][:, idx, self.classifier.N :].cpu()
             if not plot_total:
                 ax.hist(
                     internal.flatten(),
@@ -341,15 +339,14 @@ class Handler:
                     label="internal",
                     color=colors[0],
                 )
-                if idx > 0:
-                    ax.hist(
-                        left.flatten(),
-                        bins=20,
-                        density=False,
-                        alpha=0.5,
-                        label="left",
-                        color=colors[1],
-                    )
+                ax.hist(
+                    left.flatten(),
+                    bins=20,
+                    density=False,
+                    alpha=0.5,
+                    label="left",
+                    color=colors[1],
+                )
                 ax.hist(
                     right.flatten(),
                     bins=20,
@@ -387,14 +384,6 @@ class Handler:
                 label="left",
                 color=colors[1],
             )
-            # ax.hist(
-            #     readout_right.flatten(),
-            #     bins=20,
-            #     density=False,
-            #     alpha=0.5,
-            #     label="right",
-            #     color=colors[2],
-            # )
         else:
             ax.hist(
                 readout_total.flatten(),

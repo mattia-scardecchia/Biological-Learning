@@ -47,15 +47,21 @@ def sample_couplings(
     J_D_1,
     J_D_2,
     ferromagnetic: bool = False,
+    zero_out_cylinder_contribution: bool = False,
 ):
     """
-    Main diagonal
+    :param zero_out_cylinder_contribution: if True, the coupligs in the left rectangle
+    of size (H, N) (drawing from neurons in the cylinder) are set to 0.
     """
     if ferromagnetic:
         J = torch.zeros((H, H), device=device, dtype=DTYPE)
     else:
         J = torch.randn(H, H, device=device, generator=generator, dtype=DTYPE)
         J /= torch.sqrt(torch.tensor(H, device=device, dtype=DTYPE))
+    if zero_out_cylinder_contribution:
+        J[:H, :N] = (
+            0  # NOTE: we do this here cause we keep cylinder ferromagnetic couplings!
+        )
     for i in range(N):
         J[i, i] = J_D_1
     for i in range(N, H):
@@ -108,7 +114,7 @@ class BatchMeIfUCan:
         lambda_left: list[float],
         lambda_right: list[float],
         lambda_internal: float | list[float],
-        lambda_fc: float,
+        lambda_fc: float | list[float],
         lr: torch.Tensor,
         threshold: torch.Tensor,
         weight_decay: torch.Tensor,
@@ -122,6 +128,17 @@ class BatchMeIfUCan:
         double_update: bool,
         use_local_ce: bool,
         beta_ce: float,
+        lambda_cylinder: float,  # ignored
+        lambda_wback_skip: float | list[float],
+        lambda_wforth_skip: float | list[float],
+        lr_wforth_skip: float | list[float],
+        weight_decay_wforth_skip: float | list[float],
+        lambda_input_skip: float | list[float],
+        lambda_input_output_skip: float,
+        lr_input_skip: float | list[float],
+        weight_decay_input_skip: float | list[float],
+        lr_input_output_skip: float,
+        weight_decay_input_output_skip: float,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -141,6 +158,30 @@ class BatchMeIfUCan:
         assert not ("noisy" in init_mode and init_noise == 0)
         assert not (double_update and not double_dynamics)
         assert N <= H
+        if lr[-2] != 0:
+            logging.warning("Detected lr of wback != 0. Setting it to 0")
+            lr[-2] = 0
+        if isinstance(lambda_internal, float):
+            lambda_internal = [lambda_internal] * num_layers
+        if isinstance(lambda_fc, float):
+            lambda_fc = (
+                [lambda_fc] * num_layers
+            )  # 0-th element is for when fc_input is True (otherwise ignored)
+        if isinstance(lambda_wforth_skip, float):
+            lambda_wforth_skip = [lambda_wforth_skip] * (num_layers - 1)
+        if isinstance(lambda_wback_skip, float):
+            lambda_wback_skip = [lambda_wback_skip] * (num_layers - 1)
+        if isinstance(lr_wforth_skip, float):
+            lr_wforth_skip = [lr_wforth_skip] * (num_layers - 1)
+        if isinstance(weight_decay_wforth_skip, float):
+            weight_decay_wforth_skip = [weight_decay_wforth_skip] * (num_layers - 1)
+        if isinstance(lr_input_skip, float):
+            lr_input_skip = [lr_input_skip] * num_layers
+        if isinstance(weight_decay_input_skip, float):
+            weight_decay_input_skip = [weight_decay_input_skip] * num_layers
+        if isinstance(lambda_input_skip, float):
+            lambda_input_skip = [lambda_input_skip] * num_layers
+
         self.L = num_layers
         self.N = N
         self.H = H
@@ -151,8 +192,6 @@ class BatchMeIfUCan:
         self.fc_left = fc_left
         self.fc_right = fc_right
         self.fc_input = fc_input
-        if isinstance(lambda_internal, float):
-            lambda_internal = [lambda_internal] * num_layers
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
         self.symmetric_W = symmetric_W
@@ -162,9 +201,34 @@ class BatchMeIfUCan:
         self.double_update = double_update
         self.use_local_ce = use_local_ce
         self.beta_ce = beta_ce
+        self.lambda_wback_skip = torch.tensor(lambda_wback_skip, device=device)
+        self.lambda_wforth_skip = torch.tensor(lambda_wforth_skip, device=device)
+        self.lr_wforth_skip = torch.tensor(lr_wforth_skip, device=device)
+        self.weight_decay_wforth_skip = torch.tensor(
+            weight_decay_wforth_skip, device=device
+        )
+        self.lambda_input_skip = torch.tensor(lambda_input_skip, device=device)
+        self.lambda_input_output_skip = (
+            torch.tensor(lambda_input_output_skip, device=device) * self.L
+        )
+        self.lr_input_skip = torch.tensor(lr_input_skip, device=device)
+        self.weight_decay_input_skip = torch.tensor(
+            weight_decay_input_skip, device=device
+        )
+        self.lr_input_output_skip = torch.tensor(lr_input_output_skip, device=device)
+        self.weight_decay_input_output_skip = torch.tensor(
+            weight_decay_input_output_skip, device=device
+        )
+        # TODO: expose these to config
+        self.zero_out_cylinder_contribution = False  # TODO: check this
+        self.learn_free_ferromagnetic = False  # TODO: check this
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
+        self.root_N = torch.sqrt(torch.tensor(N, device=device))
         self.root_C = torch.sqrt(torch.tensor(C, device=device))
+        self.lr = lr.to(device)
+        self.weight_decay = weight_decay.to(device)
+        self.threshold = threshold.to(device)
 
         self.device = device
         self.generator = torch.Generator(device=self.device)
@@ -210,10 +274,10 @@ class BatchMeIfUCan:
 
     def prepare_tensors(self, lr, weight_decay, threshold):
         self.is_learnable = self.build_is_learnable_mask(self.fc_left, self.fc_right)
-        self.lr = self.build_lr_tensor(lr)
-        self.weight_decay = self.build_weight_decay_tensor(weight_decay)
-        self.threshold = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; yes, label and Wback feedback.
+        self.lr_tensor = self.build_lr_tensor(lr)
+        self.weight_decay_tensor = self.build_weight_decay_tensor(weight_decay)
+        self.threshold_tensor = threshold.to(self.device)
+        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
@@ -227,12 +291,14 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc,
+                    self.lambda_left[0] / self.lambda_fc[0],
                     0,
                     not fc_left,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[0]
             )
+            # J_x = J_x * self.root_H / self.root_N  # only N terms are summed over
+            J_x[:, self.N : self.H] = 0
         else:
             J_x = (
                 torch.eye(self.H, device=self.device, dtype=DTYPE) * self.lambda_left[0]
@@ -259,11 +325,12 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    0,
-                    self.lambda_right[0] / self.lambda_fc,
+                    self.lambda_right[0] / self.lambda_fc[0],
+                    self.lambda_right[0] / self.lambda_fc[0],
                     not fc_right,
+                    self.zero_out_cylinder_contribution,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[0]
             )
 
         # Middle Layers
@@ -274,11 +341,12 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc,
-                    self.lambda_left[idx] / self.lambda_fc,
+                    self.lambda_left[idx] / self.lambda_fc[idx],
+                    self.lambda_left[idx] / self.lambda_fc[idx],
                     not fc_left,
+                    self.zero_out_cylinder_contribution,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[idx]
             )
             couplings_buffer.append(
                 sample_couplings(
@@ -298,11 +366,12 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    0,
-                    self.lambda_right[idx] / self.lambda_fc,
+                    self.lambda_right[idx] / self.lambda_fc[idx],
+                    self.lambda_right[idx] / self.lambda_fc[idx],
                     not fc_right,
+                    self.zero_out_cylinder_contribution,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[idx]
             )
 
         # Last Layer
@@ -313,11 +382,12 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.lambda_left[0] / self.lambda_fc,
-                    self.lambda_left[self.L - 1] / self.lambda_fc,
+                    self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
+                    self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
                     not fc_left,
+                    self.zero_out_cylinder_contribution,
                 )
-                * self.lambda_fc
+                * self.lambda_fc[self.L - 1]
             )
             couplings_buffer.append(
                 sample_couplings(
@@ -377,6 +447,71 @@ class BatchMeIfUCan:
             ]
         )
 
+        # define skip connections, their learning rates and weight decay tensors
+        self.Wback_skip = (
+            W_back.clone().repeat(self.L - 1, 1, 1)
+            / self.lambda_right[-2]
+            * self.lambda_wback_skip[:, None, None]
+        )
+        self.Wforth_skip = (
+            W_forth.clone().repeat(self.L - 1, 1, 1)
+            / self.lambda_left[-1]
+            * self.lambda_wforth_skip[:, None, None]
+        )
+        self.lr_Wback_skip = torch.zeros_like(self.Wback_skip)
+        self.lr_Wforth_skip_tensor = (
+            torch.ones_like(self.Wforth_skip, device=self.device)
+            * self.lr_wforth_skip[:, None, None]
+            * self.lambda_wforth_skip[:, None, None]
+            / self.root_H
+        )
+        self.weight_decay_Wforth_skip_tensor = (
+            self.lr_Wforth_skip_tensor * self.weight_decay_wforth_skip[:, None, None]
+        )
+
+        assert not self.fc_input
+        assert self.lambda_left[0] == 0
+        self.input_skip = (
+            torch.randn(
+                self.L,
+                self.H,
+                self.N,
+                device=self.device,
+                generator=self.generator,
+                dtype=DTYPE,
+            )
+            / self.root_N
+            * self.lambda_input_skip[:, None, None]
+        )
+        self.lr_input_skip_tensor = (
+            torch.ones_like(self.input_skip, device=self.device)
+            * self.lr_input_skip[:, None, None]
+            * self.lambda_input_skip[:, None, None]
+            / self.root_N
+        )
+        self.weight_decay_input_skip_tensor = (
+            self.lr_input_skip_tensor * self.weight_decay_input_skip[:, None, None]
+        )
+        self.input_output_skip = (
+            torch.randn(
+                self.C,
+                self.N,
+                device=self.device,
+                generator=self.generator,
+                dtype=DTYPE,
+            )
+            / self.root_N
+        ) * self.lambda_input_output_skip
+        self.lr_input_output_skip_tensor = (
+            torch.ones_like(self.input_output_skip, device=self.device)
+            * self.lr_input_output_skip
+            * self.lambda_input_output_skip
+            / self.root_N
+        )
+        self.weight_decay_input_output_skip_tensor = (
+            self.lr_input_output_skip_tensor * self.weight_decay_input_output_skip
+        )
+
         return couplings.to(self.device)
 
     def build_is_learnable_mask(self, fc_left: bool, fc_right: bool):
@@ -387,40 +522,75 @@ class BatchMeIfUCan:
         mask[-1, C:H, :H] = 0
         mask[-2, :, 2 * H + C :] = 0
         mask[0, :, :H] = 0
+        if self.fc_input:
+            mask[0, :, :N] = 1
 
         for idx in range(L):
             mask[idx, :, H : 2 * H].fill_diagonal_(0)
             if idx > 0:
-                mask[idx, :N, :N].fill_diagonal_(0)
-                if not fc_left:
-                    mask[idx, :, :H] = 0
+                if fc_left:
+                    if self.learn_free_ferromagnetic:
+                        mask[idx, :N, :N].fill_diagonal_(0)
+                    else:
+                        mask[idx, :H, :H].fill_diagonal_(0)
+                    if self.zero_out_cylinder_contribution:
+                        mask[idx, :H, :N] = (
+                            0  # NOTE: we are also zeroing out the diagonal up to N here (but it's 0 already)!
+                        )
+                else:
+                    mask[idx, :H, :H] = 0
+                    if self.learn_free_ferromagnetic:
+                        mask[idx, N:H, N:H].fill_diagonal_(1)
             if idx < L - 1:
-                mask[idx, :N, 2 * H : 2 * H + N].fill_diagonal_(0)
-                if not fc_right:
-                    mask[idx, :, 2 * H : 3 * H] = 0
+                if fc_right:
+                    if self.learn_free_ferromagnetic:
+                        mask[idx, :N, 2 * H : 2 * H + N].fill_diagonal_(0)
+                    else:
+                        mask[idx, :H, 2 * H : 3 * H].fill_diagonal_(0)
+                    if self.zero_out_cylinder_contribution:
+                        mask[idx, :H, 2 * H : 2 * H + N] = (
+                            0  # NOTE: we are also zeroing out the diagonal up to N here (but it's 0 already)!
+                        )
+                else:
+                    mask[idx, :H, 2 * H : 3 * H] = 0
+                    if self.learn_free_ferromagnetic:
+                        mask[idx, N:H, 2 * H + N : 3 * H].fill_diagonal_(1)
+
+                # mask[idx, :N, 2 * H : 2 * H + N].fill_diagonal_(0)
+                # if not fc_right:
+                #     mask[idx, :, 2 * H : 3 * H] = 0
+                # if self.zero_out_cylinder_contribution:
+                #     mask[idx, :H, 2 * H : 2 * H + N] = 0
 
         return mask.to(self.device).to(torch.bool)
 
     def build_lr_tensor(self, lr):
+        # TODO: if we decide to turn this on, we need to ensure that the lr tensor
+        # has the appropriate magnitude for the free neurons ferromagnetic couplings
+        # (which currently it hasn't)
+        assert not self.learn_free_ferromagnetic
+        # TODO: here should consider zero_out_cylinder_contribution for normalization
+        assert not self.zero_out_cylinder_contribution
+
         H, L, C = self.H, self.L, self.C
         lr_tensor = torch.zeros_like(self.couplings)  # (L+1, H, 3H)
-        for idx in range(L):
+        for idx in range(L):  # NOTE: wback will be overwritten later
             lr_tensor[idx, :, :] = lr[idx] / math.sqrt(H)
-            if idx < L:
-                lr_tensor[idx, :, H : 2 * H] *= self.lambda_internal[idx]
-                if idx < L - 1:
-                    lr_tensor[idx, :, 2 * H : 3 * H] *= (
-                        self.lambda_fc
-                    )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
-                if idx > 0:
-                    lr_tensor[idx, :, :H] *= (
-                        self.lambda_fc
-                    )  # NOTE: this creates problems if we unfreeze the ferromagnetic diagonal
-        lr_tensor[L - 1, :, 2 * H : 2 * H + C] = (
+            lr_tensor[idx, :H, H : 2 * H] *= self.lambda_internal[idx]
+            lr_tensor[idx, :H, 2 * H : 3 * H] *= self.lambda_fc[
+                idx
+            ]  # NOTE: this multiplies the diagonal as well
+            if idx > 0 or (idx == 0 and self.fc_input):
+                lr_tensor[idx, :H, :H] *= self.lambda_fc[
+                    idx
+                ]  # NOTE: this multiplies the diagonal as well
+        lr_tensor[L - 1, :H, 2 * H : 2 * H + C] = (
             lr[-2] * self.lambda_right[-2] / math.sqrt(C)
-        )  # overwrite W_back
+        )  # NOTE: overwrite W_back
         lr_tensor[L, :C, :H] = lr[-1] * self.lambda_left[-1] / math.sqrt(H)  # W_forth
-        lr_tensor[self.is_learnable == 0] = 0
+        lr_tensor[self.is_learnable == 0] = (
+            0  # this is because above we accidentally set to nonzero some fictitious couplings (e.g. the complement of Wback)
+        )
         return lr_tensor.to(self.device)
 
     def build_weight_decay_tensor(self, weight_decay):
@@ -430,7 +600,7 @@ class BatchMeIfUCan:
             weight_decay_tensor[idx, :, :] = weight_decay[idx]
         weight_decay_tensor[L - 1, :, 2 * H : 2 * H + C] = weight_decay[-2]
         weight_decay_tensor[L, :C, :H] = weight_decay[-1]
-        weight_decay_tensor *= self.lr
+        weight_decay_tensor *= self.lr_tensor
         return weight_decay_tensor
 
     def build_ignore_right_mask(self):
@@ -469,6 +639,7 @@ class BatchMeIfUCan:
         elif mode == "zeros":
             neurons = torch.zeros((batch_size, L, H), device=self.device, dtype=DTYPE)
             y_hat = torch.zeros((batch_size, C), device=self.device, dtype=DTYPE)
+            # y_hat = y.clone()
         elif mode == "noisy_zeros":
             signs = (
                 torch.randint(0, 2, (batch_size, L, H), device=self.device, dtype=DTYPE)
@@ -515,11 +686,25 @@ class BatchMeIfUCan:
         state_unfolded = (
             state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)
         )  # Shape: (B, L+1, 3*H)
-        return torch.einsum(
+        fields = torch.einsum(
             "lni,bli->bln",
             self.couplings * self.ignore_right_mask[ignore_right],
             state_unfolded,
         )
+        if ignore_right in [0, 2]:
+            fields[:, :-2, :] += torch.einsum(
+                "lhc,bc->blh", self.Wback_skip, state[:, -2, : self.C]
+            )
+        fields[:, -1, : self.C] += torch.einsum(
+            "lch,blh->bc", self.Wforth_skip, state[:, 1:-3, :]
+        )
+        fields[:, :-1, :] += torch.einsum(
+            "lhn,bn->blh", self.input_skip, state[:, 0, : self.N]
+        )
+        fields[:, -1, : self.C] += torch.einsum(
+            "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
+        )
+        return fields
 
     def symmetrize_W(self):
         if self.symmetric_W == "buggy":
@@ -531,15 +716,39 @@ class BatchMeIfUCan:
                 / self.lambda_left[-1]
                 / 100
             )
-        elif self.symmetric_W == "sign":
-            self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
-                torch.sign(self.W_forth.T) * self.lambda_right[-2] / self.root_C
+            self.Wback_skip = (
+                self.Wforth_skip.transpose(1, 2)
+                * self.root_H
+                * self.lambda_wback_skip[:, None, None]
+                / self.root_C
+                / self.lambda_wforth_skip[:, None, None]
+                / 100
             )
-        elif self.symmetric_W:
-            norm_old = self.W_back.norm(dim=1)
+        elif self.symmetric_W == "normalize":
+            norm_old = self.W_back.norm(dim=0).mean()  # (C,)
             self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
-                self.W_forth / self.W_forth.norm(dim=0)[None, :]
-            ).T * norm_old[:, None]
+                self.W_forth / self.W_forth.norm(dim=1)[:, None]
+            ).T * norm_old[None, None]
+
+            norm_old = self.Wback_skip.norm(dim=1).mean(dim=1)  # (L-1, C)
+            self.Wback_skip = (
+                self.Wforth_skip / self.Wforth_skip.norm(dim=2)[:, :, None]
+            ).transpose(1, 2) * norm_old[:, None, None]
+        elif self.symmetric_W:
+            self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
+                self.W_forth.T
+                * self.root_H
+                * self.lambda_right[-2]
+                / self.root_C
+                / self.lambda_left[-1]
+            )
+            self.Wback_skip = (
+                self.Wforth_skip.transpose(1, 2)
+                * self.root_H
+                * self.lambda_wback_skip[:, None, None]
+                / self.root_C
+                / self.lambda_wforth_skip[:, None, None]
+            )
         else:
             pass
 
@@ -553,12 +762,12 @@ class BatchMeIfUCan:
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, H)
         if self.use_local_ce:
             is_unstable = 1 - torch.sigmoid(
-                self.beta_ce * (fields * neurons - self.threshold[None, :, None])
+                self.beta_ce * (fields * neurons - self.threshold_tensor[None, :, None])
             )  # omit a beta_ce factor to decouple slope and lr
         else:
-            is_unstable = (fields * neurons) <= self.threshold[None, :, None]
+            is_unstable = (fields * neurons) <= self.threshold_tensor[None, :, None]
         delta = (
-            self.lr
+            self.lr_tensor
             * torch.einsum("bli,blcj->licj", neurons * is_unstable, S_unfolded).flatten(
                 2
             )
@@ -566,7 +775,47 @@ class BatchMeIfUCan:
         )
         if delta_mask is not None:
             delta = delta * delta_mask
-        self.couplings = self.couplings * (1 - self.weight_decay) + delta
+        self.couplings = self.couplings * (1 - self.weight_decay_tensor) + delta
+
+        delta_skip = (
+            self.lr_Wforth_skip_tensor
+            * torch.einsum(
+                "bc,blh->lch",
+                neurons[:, -1, : self.C] * is_unstable[:, -1, : self.C],
+                state[:, 1:-3, :],
+            )
+            / math.sqrt(state.shape[0])
+        )
+        self.Wforth_skip = (
+            self.Wforth_skip * (1 - self.weight_decay_Wforth_skip_tensor) + delta_skip
+        )
+
+        delta_input_skip = (
+            self.lr_input_skip_tensor
+            * torch.einsum(
+                "blh,bn->lhn",
+                neurons[:, :-1, :] * is_unstable[:, :-1, :],
+                state[:, 0, : self.N],
+            )
+            / math.sqrt(state.shape[0])
+        )
+        self.input_skip = (
+            self.input_skip * (1 - self.weight_decay_input_skip_tensor)
+            + delta_input_skip
+        )
+        delta_input_output_skip = (
+            self.lr_input_output_skip_tensor
+            * torch.einsum(
+                "bc,bn->cn",
+                neurons[:, -1, : self.C] * is_unstable[:, -1, : self.C],
+                state[:, 0, : self.N],
+            )
+            / math.sqrt(state.shape[0])
+        )
+        self.input_output_skip = (
+            self.input_output_skip * (1 - self.weight_decay_input_output_skip_tensor)
+            + delta_input_output_skip
+        )
 
         self.symmetrize_W()  # W_back <- W_forth (with appropriate scaling)
         return is_unstable
@@ -689,7 +938,12 @@ class BatchMeIfUCan:
             self.init_mode,
         )
         final_state, num_sweeps, unsat = self.relax(state, max_sweeps, ignore_right=4)
-        logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
+        logits = self.local_field(final_state, ignore_right=4)[:, -1, : self.C]
+        # logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
+        # logits += torch.einsum("lch,blh->bc", self.Wforth_skip, final_state[:, 1:-3, :])
+        # logits += torch.einsum(
+        #     "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
+        # )
         states, readout = final_state[:, 1:-2], final_state[:, -2]
         return logits, states, readout
 
@@ -752,6 +1006,18 @@ class BatchMeIfUCan:
             "lni,bli->bln",
             self.couplings[:, :, 2 * self.H : 3 * self.H],
             state[:, 2:, :],
+        )
+        right[:, :-2, :] += torch.einsum(
+            "lhc,bc->blh", self.Wback_skip, state[:, -2, : self.C]
+        )
+        left[:, -1, : self.C] += torch.einsum(
+            "lch,blh->bc", self.Wforth_skip, state[:, 1:-3, :]
+        )
+        left[:, -1, : self.C] += torch.einsum(
+            "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
+        )
+        left[:, :-1, :] += torch.einsum(
+            "lhn,bn->blh", self.input_skip, state[:, 0, : self.N]
         )
         total = internal + left + right
         return {
