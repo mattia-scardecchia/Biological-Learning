@@ -41,11 +41,11 @@ beta_ce: 10.0
 num_epochs: 20
 batch_size: 16
 lr: [0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
-# threshold: [1.0, 3.0]                       # perceptron rule. last is for readout layer
+# threshold: [0.7, 3.0]                       # perceptron rule. last is for readout layer
 weight_decay: [0.005, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
 # lr_J: 0.03
 # lr_W: 0.1
-threshold_hidden: 1.0
+threshold_hidden: 0.4
 threshold_readout: 3.0
 # weight_decay_J: 0.01
 # weight_decay_W: 0.005
