@@ -128,6 +128,7 @@ class BatchMeIfUCan:
         double_update: bool,
         use_local_ce: bool,
         beta_ce: float,
+        temperature: float,
         lambda_cylinder: float,  # ignored
         lambda_wback_skip: float | list[float],
         lambda_wforth_skip: float | list[float],
@@ -229,6 +230,7 @@ class BatchMeIfUCan:
         self.lr = lr.to(device)
         self.weight_decay = weight_decay.to(device)
         self.threshold = threshold.to(device)
+        self.temperature = temperature
 
         self.device = device
         self.generator = torch.Generator(device=self.device)
@@ -825,33 +827,46 @@ class BatchMeIfUCan:
         state: torch.Tensor,
         max_steps: int,
         ignore_right: int,
+        temperature: float = 0.00001,
     ):
         sweeps = 0
         while sweeps < max_steps:
-            # state[:, 1:-2, -1] = 1  # set a neuron per layer to 1 to project a bias term
+            # # state[:, 1:-2, -1] = 1  # set a neuron per layer to 1 to project a bias term
             fields = self.local_field(state, ignore_right=ignore_right)
-            # logits = state[:, -3] @ self.W_forth.T
-            torch.sign(fields, out=state[:, 1:-1, :])
-            # if ignore_right and sweeps >= 2:
-            #     new_readout = F.one_hot(torch.argmax(logits, -1), self.H)
-            #     state[:, -2] = new_readout  # overwrite readout
+            probas = F.sigmoid(fields / temperature)
+            state[:, 1:-1, :] = (
+                2 * torch.bernoulli(probas, generator=self.generator) - 1
+            )
+            # torch.sign(fields, out=state[:, 1:-1, :])
+            # # # logits = state[:, -3] @ self.W_forth.T
+            # # # if ignore_right and sweeps >= 2:
+            # # #     new_readout = F.one_hot(torch.argmax(logits, -1), self.H)
+            # # #     state[:, -2] = new_readout  # overwrite readout
             sweeps += 1
         unsat = self.fraction_unsat(state, ignore_right=ignore_right)
-        # state[:, 1:-2, -1] = 1  # bias term
+        # # state[:, 1:-2, -1] = 1  # bias term
         return state, sweeps, unsat
 
-    def double_relax(self, state, max_sweeps):
+    def double_relax(self, state, max_sweeps, temperature: float = 0.00001):
         sweeps = 0
         while sweeps < max_sweeps:
             fields = self.local_field(state, ignore_right=0)
-            state[:, 1:-1, :] = torch.sign(fields)
+            # state[:, 1:-1, :] = torch.sign(fields)
+            probas = F.sigmoid(fields / temperature)
+            state[:, 1:-1, :] = (
+                2 * torch.bernoulli(probas, generator=self.generator) - 1
+            )
             sweeps += 1
         fields = self.local_field(state, ignore_right=0)
         first_unsat = state[:, 1:-1, :] != torch.sign(fields)
         first_fixed_point = state.clone()
         while sweeps < 2 * max_sweeps:
             fields = self.local_field(state, ignore_right=3)
-            state[:, 1:-1, :] = torch.sign(fields)
+            # state[:, 1:-1, :] = torch.sign(fields)
+            probas = F.sigmoid(fields / temperature)
+            state[:, 1:-1, :] = (
+                2 * torch.bernoulli(probas, generator=self.generator) - 1
+            )
             sweeps += 1
         fields = self.local_field(state, ignore_right=3)
         second_unsat = state[:, 1:-1, :] != torch.sign(fields)
@@ -867,12 +882,12 @@ class BatchMeIfUCan:
         if self.double_dynamics:
             # Dynamics with annealing
             first_fixed_point, final_state, num_sweeps, _, unsat = self.double_relax(
-                state, max_sweeps
+                state, max_sweeps, temperature=self.temperature
             )
         else:
             # Simple dynamics
             final_state, num_sweeps, unsat = self.relax(
-                state, max_sweeps, ignore_right=0
+                state, max_sweeps, ignore_right=0, temperature=self.temperature
             )
         if self.double_update:
             # Double update (J on fixed point with external field, W on the one without it)

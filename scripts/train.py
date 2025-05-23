@@ -179,6 +179,8 @@ def parse_config(cfg):
         threshold = cfg.threshold
     except Exception:
         threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
+    for i in range(cfg.num_layers):
+        threshold[i] = threshold[i] + cfg.J_D
     try:
         lambda_left = cfg.lambda_left
     except Exception:
@@ -226,6 +228,7 @@ def main(cfg):
         "double_update": cfg.double_update,
         "use_local_ce": cfg.use_local_ce,
         "beta_ce": cfg.beta_ce,
+        "temperature": cfg.temperature,
         "fc_left": cfg.fc_left,
         "fc_right": cfg.fc_right,
         "fc_input": cfg.fc_input,

@@ -226,6 +226,7 @@ def main(cfg):
         "double_update": cfg.double_update,
         "use_local_ce": cfg.use_local_ce,
         "beta_ce": cfg.beta_ce,
+        "temperature": cfg.temperature,
         "fc_left": cfg.fc_left,
         "fc_right": cfg.fc_right,
         "fc_input": cfg.fc_input,
