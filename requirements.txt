@@ -7,4 +7,5 @@ torchvision
 
 tqdm
 hydra-core
+hydra-submitit-launcher
 mup
