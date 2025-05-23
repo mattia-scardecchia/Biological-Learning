@@ -1,0 +1,8 @@
+defaults:
+  - train_symmetric@here
+  - _self_
+
+J_D: 0.2,0.5,0.7
+H: 256,512,1024,2048
+symmetric_J_init: false,true
+

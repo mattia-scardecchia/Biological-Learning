@@ -51,7 +51,7 @@ beta_ce: 10.0
 lambda_cylinder: null
 
 # Perceptron Rule
-num_epochs: 40
+num_epochs: 70
 batch_size: 16
 lr_J: 0.03
 lr_W: 0.1
