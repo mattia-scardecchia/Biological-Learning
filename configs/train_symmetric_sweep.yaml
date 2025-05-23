@@ -1,5 +1,5 @@
 defaults:
-  - train_symmetric@here
+  - train_symmetric
   - _self_
 
 J_D: 0.2,0.5,0.7
