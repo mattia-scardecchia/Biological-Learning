@@ -8,7 +8,7 @@ defaults:
 # Experiment
 name: 'investigate_symmetry'
 seed: 17
-device: 'mps'
+device: 'cuda'
 
 # Network and Relaxation
 N: 100
