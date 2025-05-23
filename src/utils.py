@@ -159,9 +159,9 @@ def plot_representations_similarity_among_layers(
     """
     if average_inputs:
         # Get a list of all input keys and use one to determine the shape.
-        assert input_key is None, (
-            "input_key should be None when averaging across inputs."
-        )
+        assert (
+            input_key is None
+        ), "input_key should be None when averaging across inputs."
         input_keys = sorted(representations.keys())
         rep0 = representations[input_keys[0]]  # shape: (T, L, N)
     else:
@@ -347,7 +347,68 @@ def plot_couplings_histograms(logs, time_indexes, bins=30):
     fig_right.suptitle("Right Couplings (density)")
     fig_right.tight_layout()
     figs["right"] = fig_right
+    return figs
 
+
+def plot_couplings_asymmetry_histograms(logs, time_indexes, bins=30):
+    """
+    Plot histograms for the evolution of coupling distributions at specified time indexes.
+
+    Parameters:
+        logs (dict): Dictionary with the following keys and expected numpy array shapes:
+            - "W_forth": np.array of shape (T, C, N)
+            - "W_back": np.array of shape (T, N, C)
+            - "internal_couplings": np.array of shape (T, L, N, N)
+            - "left_couplings": np.array of shape (T, L, N, N)
+            - "right_couplings": np.array of shape (T, L, N, N)
+        time_indexes (list of int): List of time step indices at which to plot histograms.
+        bins (int, optional): Number of bins for the histogram plots (default is 50).
+
+    Legend for shapes:
+        T: Number of time steps.
+        L: Number of layers.
+        N: Number of neurons per layer.
+        C: Number of classes.
+
+    Behavior:
+        - Creates one figure for "internal_couplings" with one subplot per layer.
+        - Creates one figure for "left_couplings" combined with "W_forth":
+              one subplot per layer for "left_couplings" and an extra subplot for "W_forth".
+        - Creates one figure for "right_couplings" combined with "W_back":
+              one subplot per layer for "right_couplings" and an extra subplot for "W_back".
+        - In each subplot, histograms are plotted for the given time indexes with a legend indicating the time.
+    """
+    figs = {}
+
+    def asymmetry_histogram(couplings: torch.Tensor):
+        """
+        Compute the asymmetry of the couplings.
+        """
+        couplings = torch.tensor(couplings)
+        couplings_t = couplings.transpose(0, 1)
+        # S_{ij} = max(|C_ij|, |C_{ji}|, + 1e-6)
+        scale_factor = torch.maximum(
+            torch.maximum(couplings.abs(), couplings_t.abs()),
+            torch.tensor(1e-6, dtype=couplings.dtype, device=couplings.device),
+        )
+        asymmetry = (couplings - couplings_t) / scale_factor
+        return asymmetry.abs().flatten().numpy()
+
+    # 1. Internal Couplings
+    internal = logs["internal_couplings"]  # shape: (T, L, N, N)
+    T, L, _, _ = internal.shape
+    fig_int, axes_int = create_subplots(L)
+    for l in range(L):
+        ax = axes_int[l]
+        for t in time_indexes:
+            data = asymmetry_histogram(internal[t, l])
+            ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+        ax.set_title(f"Layer {l}")
+        ax.legend()
+        ax.grid(True)
+    fig_int.suptitle("Internal Couplings (asymmetry)")
+    fig_int.tight_layout()
+    figs["internal_asymmetry"] = fig_int
     return figs
 
 

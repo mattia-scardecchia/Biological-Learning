@@ -24,6 +24,7 @@ from src.utils import (
     plot_accuracy_history,
     plot_couplings_distro_evolution,
     plot_couplings_histograms,
+    plot_couplings_asymmetry_histograms,
     plot_representation_similarity_among_inputs,
     plot_representations_similarity_among_layers,
 )
@@ -194,7 +195,7 @@ def parse_config(cfg):
     return lr, weight_decay, threshold, lambda_left, lambda_right
 
 
-@hydra.main(config_path="../configs", config_name="train", version_base="1.3")
+@hydra.main(config_path="../configs", config_name="train_symmetric", version_base="1.3")
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
     lr, weight_decay, threshold, lambda_left, lambda_right = parse_config(cfg)
@@ -222,6 +223,7 @@ def main(cfg):
         "init_mode": cfg.init_mode,
         "init_noise": cfg.init_noise,
         "symmetric_W": cfg.symmetric_W,
+        "symmetric_J_init": cfg.symmetric_J_init,
         "double_dynamics": cfg.double_dynamics,
         "double_update": cfg.double_update,
         "use_local_ce": cfg.use_local_ce,
@@ -344,6 +346,15 @@ def main(cfg):
         figs = plot_couplings_distro_evolution(logs)
         for key, fig in figs.items():
             fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
+            plt.close(fig)
+        # Couplings Asymmetry
+        if cfg.symmetric_J_init:
+            epochs = [1, 2, cfg.num_epochs - 1]
+        else:
+            epochs = [0, 1, 2, cfg.num_epochs - 1]
+        figs = plot_couplings_asymmetry_histograms(logs, epochs)
+        for key, fig in figs.items():
+            fig.savefig(os.path.join(couplings_root_dir, f"{key}.png"))
             plt.close(fig)
 
     logging.info(
