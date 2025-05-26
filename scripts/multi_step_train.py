@@ -7,17 +7,11 @@ import time
 import hydra
 import numpy as np
 import torch
-import torch.nn as nn
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
+from scripts.train import get_data, parse_config, plot_fields_breakdown
 from src.batch_me_if_u_can import BatchMeIfUCan
-from src.data import (
-    load_synthetic_dataset,
-    prepare_cifar,
-    prepare_hm_data,
-    prepare_mnist,
-)
 from src.handler import Handler
 from src.utils import (
     plot_accuracy_by_class_barplot,
@@ -63,141 +57,17 @@ def plot_representation_similarity(logs, save_dir, cfg, num_epochs):
         plt.close(fig)
 
 
-def plot_fields_breakdown(handler: Handler, cfg, save_dir, title, x, y):
-    for max_steps in [0, cfg.max_steps]:
-        for ignore_right in [0, 1]:
-            for plot_total in [False, True]:
-                fig, axs = handler.fields_histogram(
-                    x, y, max_steps, ignore_right, plot_total
-                )
-                fig.suptitle(
-                    title
-                    + f". Relaxation: max_steps={max_steps}, ignore_right={ignore_right}"
-                )
-                fig.tight_layout()
-                plt.savefig(
-                    os.path.join(
-                        save_dir,
-                        f"{'field_breakdown' if not plot_total else 'total_field'}_{max_steps}_{ignore_right}.png",
-                    )
-                )
-                plt.close(fig)
-
-
-def get_data(cfg):
-    if cfg.data.dataset == "synthetic":
-        train_data_dir = os.path.join(cfg.data.synthetic.save_dir, "train")
-        test_data_dir = os.path.join(cfg.data.synthetic.save_dir, "test")
-        C = cfg.data.synthetic.C
-        rng = np.random.default_rng(cfg.seed)
-        (
-            train_inputs,
-            train_targets,
-            eval_inputs,
-            eval_targets,
-            train_metadata,
-            train_class_prototypes,
-            eval_metadata,
-            eval_class_prototypes,
-        ) = load_synthetic_dataset(
-            cfg.N,
-            cfg.data.P,
-            C,
-            cfg.data.synthetic.p,
-            cfg.data.P_eval,
-            rng,
-            train_data_dir,
-            test_data_dir,
-            cfg.device,
-        )
-    elif cfg.data.dataset == "mnist":
-        C = 10
-        train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
-            prepare_mnist(
-                cfg.data.P * C,
-                cfg.data.P_eval * C,
-                cfg.N,
-                cfg.data.mnist.binarize,
-                cfg.seed,
-                shuffle=True,
-            )
-        )
-    elif cfg.data.dataset == "cifar":
-        C = 10 if cfg.data.cifar.cifar10 else 100
-        (
-            train_inputs,
-            train_targets,
-            eval_inputs,
-            eval_targets,
-            projection_matrix,
-            median,
-        ) = prepare_cifar(
-            cfg.data.P * C,
-            cfg.data.P_eval * C,
-            cfg.N,
-            cfg.data.cifar.binarize,
-            cfg.seed,
-            cifar10=cfg.data.cifar.cifar10,
-            shuffle=True,
-        )
-    elif cfg.data.dataset == "hm":
-        C = cfg.data.hm.C
-        (
-            train_inputs,
-            train_targets,
-            eval_inputs,
-            eval_targets,
-            teacher_linear,
-            teacher_mlp,
-        ) = prepare_hm_data(
-            cfg.data.hm.D,
-            cfg.data.hm.C,
-            cfg.data.P,
-            cfg.data.P_eval,
-            cfg.N,
-            cfg.data.hm.L,
-            cfg.data.hm.width,
-            nn.ReLU(),
-            cfg.seed,
-            cfg.data.hm.binarize,
-        )
-    else:
-        raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
-    return train_inputs, train_targets, eval_inputs, eval_targets, C
-
-
-def parse_config(cfg):
-    try:
-        lr = cfg.lr
-    except Exception:
-        lr = [cfg.lr_J] * cfg.num_layers + [cfg.lr_W] * 2
-    try:
-        weight_decay = cfg.weight_decay
-    except Exception:
-        weight_decay = [cfg.weight_decay_J] * cfg.num_layers + [cfg.weight_decay_W] * 2
-    try:
-        threshold = cfg.threshold
-    except Exception:
-        threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
-    try:
-        lambda_left = cfg.lambda_left
-    except Exception:
-        lambda_left = [cfg.lambda_x] + [cfg.lambda_l] * (cfg.num_layers - 1) + [1.0]
-    try:
-        lambda_right = cfg.lambda_right
-    except Exception:
-        lambda_right = (
-            [cfg.lambda_r] * (cfg.num_layers - 1) + [cfg.lambda_wback] + [cfg.lambda_y]
-        )
-    return lr, weight_decay, threshold, lambda_left, lambda_right
-
-
 @hydra.main(
     config_path="../configs", config_name="multi_step_train", version_base="1.3"
 )
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
     lr, weight_decay, threshold, lambda_left, lambda_right = parse_config(cfg)
+    lr_cfg, weight_decay_cfg, threshold_cfg = (
+        torch.tensor(lr),
+        torch.tensor(weight_decay),
+        torch.tensor(threshold),
+    )
 
     train_inputs, train_targets, eval_inputs, eval_targets, C = get_data(cfg)
     train_inputs = train_inputs.to(cfg.device)
@@ -252,6 +122,10 @@ def main(cfg):
         cfg.skip_couplings,
         output_dir,
     )
+    lr_input_skip = model.lr_input_skip.clone()
+    lr_input_output_skip = model.lr_input_output_skip.clone()
+    weight_decay_input_skip = model.weight_decay_input_skip.clone()
+    weight_decay_input_output_skip = model.weight_decay_input_output_skip.clone()
 
     fields_plots_dir = os.path.join(output_dir, "fields")
     os.makedirs(fields_plots_dir, exist_ok=True)
@@ -267,13 +141,23 @@ def main(cfg):
     t0 = time.time()
 
     # === Phase 1: Train the readout only, with no readout feedback ===
-    lr = torch.tensor(cfg.lr)
+    lr = lr_cfg.clone()
     lr[:-2] = 0.0
-    weight_decay = torch.tensor(cfg.weight_decay)
-    threshold = torch.tensor(cfg.threshold)
-    model.prepare_tensors(lr, weight_decay, threshold)  # re-create lr tensor
+    weight_decay = weight_decay_cfg.clone()
+    threshold = threshold_cfg.clone()
+    model.prepare_tensors(
+        lr,
+        weight_decay,
+        threshold,
+        torch.zeros_like(lr_input_skip),
+        lr_input_output_skip,
+        weight_decay_input_skip,
+        weight_decay_input_output_skip,
+    )  # re-create lr tensor
     model.set_wback(torch.zeros_like(model.W_back))  # no wback feedback
-    model.symmetric_W = False  # otherwise, wforth might be updated
+    model.symmetric_W = (
+        False  # otherwise, wback might be updated and start providing feedback
+    )
     handler.begin_curriculum = 1.0
     handler.p_curriculum = 0.5
 
@@ -330,16 +214,26 @@ def main(cfg):
             )
 
     # copy wforth into wback, and re-set symmetric_W option
-    model.set_wback(model.wforth2wback(model.W_forth))  # because we had set it to 0
+    model.set_wback(
+        model.wforth2wback(model.W_forth)
+    )  # because we had set it to 0. as if we were initializing wback and wforth anew, make them symmetric
     model.symmetric_W = cfg.symmetric_W
     model.symmetrize_W()  # for plots with buggy option
 
     # === Phase 2: Train the couplings only, with feedback from the readout ===
-    lr = torch.tensor(cfg.lr)
+    lr = lr_cfg.clone()
     lr[-2:] = 0.0
-    weight_decay = torch.tensor(cfg.weight_decay)
-    threshold = torch.tensor(cfg.threshold)
-    model.prepare_tensors(lr, weight_decay, threshold)
+    weight_decay = weight_decay_cfg.clone()
+    threshold = threshold_cfg.clone()
+    model.prepare_tensors(
+        lr,
+        weight_decay,
+        threshold,
+        lr_input_skip,
+        lr_input_output_skip,
+        weight_decay_input_skip,
+        weight_decay_input_output_skip,
+    )  # re-create lr tensor
     handler.begin_curriculum = cfg.begin_curriculum
     handler.p_curriculum = cfg.p_curriculum
 
@@ -396,10 +290,18 @@ def main(cfg):
             )
 
     # === Phase 2bis: train the full network as usual ===
-    lr = torch.tensor(cfg.lr)
-    weight_decay = torch.tensor(cfg.weight_decay)
-    threshold = torch.tensor(cfg.threshold)
-    model.prepare_tensors(lr, weight_decay, threshold)
+    lr = lr_cfg.clone()
+    weight_decay = weight_decay_cfg.clone()
+    threshold = threshold_cfg.clone()
+    model.prepare_tensors(
+        lr,
+        weight_decay,
+        threshold,
+        lr_input_skip,
+        lr_input_output_skip,
+        weight_decay_input_skip,
+        weight_decay_input_output_skip,
+    )  # re-create lr tensor
     handler.begin_curriculum = cfg.begin_curriculum
     handler.p_curriculum = cfg.p_curriculum
 
@@ -456,15 +358,29 @@ def main(cfg):
             )
 
     # === Phase 3: tune the readout weights, with no feedback from the readout ===
-    lr = torch.tensor(cfg.lr)
+    lr = lr_cfg.clone()
     lr[:-2] = 0.0
-    weight_decay = torch.tensor(cfg.weight_decay)
-    threshold = torch.tensor(cfg.threshold)
-    model.prepare_tensors(lr, weight_decay, threshold)
+    weight_decay = weight_decay_cfg.clone()
+    threshold = threshold_cfg.clone()
+    model.prepare_tensors(
+        lr,
+        weight_decay,
+        threshold,
+        torch.zeros_like(lr_input_skip),
+        lr_input_output_skip,
+        weight_decay_input_skip,
+        weight_decay_input_output_skip,
+    )  # re-create lr tensor
     model.set_wback(torch.zeros_like(model.W_back))
     model.symmetric_W = False
     handler.begin_curriculum = cfg.begin_curriculum_tuning
     handler.p_curriculum = cfg.p_curriculum_tuning
+
+    # # reset wforth
+    # wforth_fresh = sample_readout_weights(
+    #     model.H, model.C, model.device, model.generator
+    # )
+    # model.couplings[-1, : model.C, : model.H] = wforth_fresh.T
 
     # Final fields before phase 3
     plots_dir = os.path.join(fields_plots_dir, "phase-3")
