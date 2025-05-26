@@ -92,6 +92,7 @@ def main(cfg):
         "init_mode": cfg.init_mode,
         "init_noise": cfg.init_noise,
         "symmetric_W": cfg.symmetric_W,
+        "symmetric_J_init": cfg.symmetric_J_init,
         "double_dynamics": cfg.double_dynamics,
         "double_update": cfg.double_update,
         "use_local_ce": cfg.use_local_ce,

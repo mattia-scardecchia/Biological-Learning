@@ -398,6 +398,7 @@ def plot_couplings_asymmetry_histograms(logs, time_indexes, bins=30):
         """
         Compute the global asymmetry metric for a coupling matrix.
         """
+        couplings = torch.tensor(couplings)
         symemtric = (couplings + couplings.T) / 2
         asymmetric = (couplings - couplings.T) / 2
         symmetry_norm = torch.linalg.norm(symemtric, p=2)
