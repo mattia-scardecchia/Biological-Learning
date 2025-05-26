@@ -113,7 +113,7 @@ class BatchMeIfUCan:
         N: int,
         H: int,
         C: int,
-        J_D: float,
+        J_D: float | list[float],
         lambda_left: list[float],
         lambda_right: list[float],
         lambda_internal: float | list[float],
@@ -185,6 +185,8 @@ class BatchMeIfUCan:
             weight_decay_input_skip = [weight_decay_input_skip] * num_layers
         if isinstance(lambda_input_skip, float):
             lambda_input_skip = [lambda_input_skip] * num_layers
+        if isinstance(J_D, float):
+            J_D = [J_D] * num_layers
 
         self.L = num_layers
         self.N = N
@@ -321,8 +323,8 @@ class BatchMeIfUCan:
                 self.H,
                 self.device,
                 self.generator,
-                self.J_D,
-                self.J_D,
+                self.J_D[0],
+                self.J_D[0],
                 False,
                 symmetric=self.symmetric_J_init,
             )
@@ -366,8 +368,8 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.J_D,
-                    self.J_D,
+                    self.J_D[idx],
+                    self.J_D[idx],
                     False,
                     symmetric=self.symmetric_J_init,
                 )
@@ -410,8 +412,8 @@ class BatchMeIfUCan:
                     self.H,
                     self.device,
                     self.generator,
-                    self.J_D,
-                    self.J_D,
+                    self.J_D[self.L - 1],
+                    self.J_D[self.L - 1],
                     False,
                     symmetric=self.symmetric_J_init,
                 )
@@ -701,6 +703,12 @@ class BatchMeIfUCan:
         :param state: shape (B, L+3, H)
         :return: shape (B, L+1, H)
         """
+        # # rescale importance of wrong class prototypes in wback field, while keeping total field roughly the same
+        # state[:, -2, : self.C][state[:, -2, : self.C] == -1] = -1 / self.root_C
+        # state[:, -2, : self.C] = state[:, -2, : self.C] * self.root_C / 2
+        # state[:, -2, : self.C] = torch.where(
+        #    state[:, -2, : self.C] == -1, -0.5, self.root_C / 2
+        # )
         state_unfolded = (
             state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)
         )  # Shape: (B, L+1, 3*H)
