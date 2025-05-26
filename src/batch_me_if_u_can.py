@@ -712,9 +712,12 @@ class BatchMeIfUCan:
         :param state: shape (B, L+3, H)
         :return: shape (B, L+1, H)
         """
-        # rescale importance of wrong class prototypes in wback field, while keeping total field roughly the same
+        # # rescale importance of wrong class prototypes in wback field, while keeping total field roughly the same
         state[:, -2, : self.C][state[:, -2, : self.C] == -1] = -1 / self.root_C
         state[:, -2, : self.C] = state[:, -2, : self.C] * self.root_C / 2
+        # state[:, -2, : self.C] = torch.where(
+        #     state[:, -2, : self.C] == -1, -0.5, self.root_C / 2
+        # )
 
         state_unfolded = (
             state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)

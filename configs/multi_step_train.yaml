@@ -24,11 +24,11 @@ init_noise: 0.0
 lambda_x: 0.0
 lambda_y: 1000.0
 lambda_l: 1.0
-lambda_r: ${lambda_l}
+lambda_r: 1.0
 lambda_internal: 1.0
 lambda_fc: 1.0
 lambda_wback_skip: [0.0]
-lambda_wback: 0.5  # (/100 if buggy)
+lambda_wback: 0.25  # (/100 if buggy)
 lambda_input_skip: [1.0, 0.0]
 lambda_input_output_skip: 0.0  # multiplied by L
 lambda_wforth_skip: [0.0]
