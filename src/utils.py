@@ -394,6 +394,18 @@ def plot_couplings_asymmetry_histograms(logs, time_indexes, bins=30):
         asymmetry = (couplings - couplings_t) / scale_factor
         return asymmetry.abs().flatten().numpy()
 
+    def global_asymmetry_metric(couplings: torch.Tensor):
+        """
+        Compute the global asymmetry metric for a coupling matrix.
+        """
+        symemtric = (couplings + couplings.T) / 2
+        asymmetric = (couplings - couplings.T) / 2
+        symmetry_norm = torch.linalg.norm(symemtric, p=2)
+        asymmetry_norm = torch.linalg.norm(asymmetric, p=2)
+        return (symmetry_norm - asymmetry_norm) / (
+            symmetry_norm + asymmetry_norm + 1e-6
+        )
+
     # 1. Internal Couplings
     internal = logs["internal_couplings"]  # shape: (T, L, N, N)
     T, L, _, _ = internal.shape
@@ -402,7 +414,14 @@ def plot_couplings_asymmetry_histograms(logs, time_indexes, bins=30):
         ax = axes_int[l]
         for t in time_indexes:
             data = asymmetry_histogram(internal[t, l])
-            ax.hist(data, bins=bins, alpha=0.3, label=f"t={t}", density=True)
+            asymmetry_global = global_asymmetry_metric(internal[t, l])
+            ax.hist(
+                data,
+                bins=bins,
+                alpha=0.3,
+                label=f"t={t}, g={asymmetry_global:.2f}",
+                density=True,
+            )
         ax.set_title(f"Layer {l}")
         ax.legend()
         ax.grid(True)
