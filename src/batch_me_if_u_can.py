@@ -849,14 +849,14 @@ class BatchMeIfUCan:
             # state[:, 1:-2, -1] = 1  # set a neuron per layer to 1 to project a bias term
             fields = self.local_field(state, ignore_right=ignore_right)
             # logits = state[:, -3] @ self.W_forth.T
-            p_update = 0.5
-            update_mask = torch.rand_like(fields) < p_update
-            state[:, 1:-1, :] = torch.where(
-                update_mask,
-                torch.sign(fields),
-                state[:, 1:-1, :],
-            )
-            # torch.sign(fields, out=state[:, 1:-1, :])
+            # p_update = 0.5
+            # update_mask = torch.rand_like(fields) < p_update
+            # state[:, 1:-1, :] = torch.where(
+            #    update_mask,
+            #    torch.sign(fields),
+            #    state[:, 1:-1, :],
+            # )
+            torch.sign(fields, out=state[:, 1:-1, :])
             # if ignore_right and sweeps >= 2:
             #     new_readout = F.one_hot(torch.argmax(logits, -1), self.H)
             #     state[:, -2] = new_readout  # overwrite readout
