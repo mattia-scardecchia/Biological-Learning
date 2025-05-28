@@ -13,22 +13,22 @@ device: 'cuda'
 # Network and Relaxation
 N: 100
 H: 300
-num_layers: 1
+num_layers: 2
 J_D: 0.5
 max_steps: 5                                   # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros", "noisy_zeros"
 init_noise: 0.0
-lambda_left: [0.0, 1.0]     # first is lambda_x, last affects the readout layer
-lambda_right: [0.5, 1000.0]  # last is lambda_y, last but one affects the readout layer
+lambda_left: [0.0, 1.0, 1.0]     # first is lambda_x, last affects the readout layer
+lambda_right: [0.5, 0.5, 1000.0]  # last is lambda_y, last but one affects the readout layer
 # lambda_x: 0.0
 # lambda_y: 1000.0
 # lambda_l: 2.0
 # lambda_r: 2.0
 
-lambda_wback_skip: [0.0]
-lambda_input_skip: [1.0]
+lambda_wback_skip: [0.0, 0.0]  # no skip connections
+lambda_input_skip: [1.0, 0.0]
 lambda_input_output_skip: 0.0  # multiplied by L
-lambda_wforth_skip: [0.0]
+lambda_wforth_skip: [0.0, 0.0]
 
 lr_wforth_skip: 0.0
 weight_decay_wforth_skip: 0.000
@@ -53,8 +53,9 @@ lambda_cylinder: null
 # Perceptron Rule
 num_epochs: 70
 batch_size: 16
-lr_J: 0.03
-lr_W: 0.1
+# lr_J: 0.03
+# lr_W: 0.1
+lr : [0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
 threshold_hidden: 1.0
 threshold_readout: 4.0
 weight_decay_J: 0.005

@@ -44,7 +44,6 @@ fc_right: false
 fc_input: false
 lambda_internal: 1.0
 lambda_fc: 1.0
-symmetric_W: normalize
 double_dynamics: false
 double_update: false
 use_local_ce: false
