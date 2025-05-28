@@ -28,32 +28,32 @@ lambda_r: ${lambda_l}
 lambda_internal: 1.0
 lambda_fc: 1.0
 lambda_wback_skip: [0.0]
-lambda_wback: 0.5  # (/100 if buggy)
-lambda_input_skip: [1.0, 0.0]
+lambda_wback: 5  # (/100 if buggy)
+lambda_input_skip: [2.0, 0.0]
 lambda_input_output_skip: 0.0  # multiplied by L
 lambda_wforth_skip: [0.0]
 lambda_wforth: 1.0
 
-fc_left: false
+fc_left: true
 fc_right: false
 fc_input: false
 symmetric_W: false
 double_dynamics: false
 double_update: false
-use_local_ce: false
-beta_ce: 10.0
+use_local_ce: true
+beta_ce: 2.5
 lambda_cylinder: null
 
 # Perceptron Rule
-num_epochs: 15
+num_epochs: 20
 batch_size: 16
-# lr: [0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
-threshold: [0.5, 1.0, 3.0]                       # perceptron rule. last is for readout layer
+lr: [0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
+threshold: [1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
 # weight_decay: [0.01, 0.01, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
 lr_input_output_skip: 0.1
 lr_input_skip: 0.03
-lr_J: 0.03
-lr_W: 0.1
+# lr_J: 0.03
+# lr_W: 0.1
 lr_wforth_skip: 0.1
 
 # threshold_hidden: 0.7

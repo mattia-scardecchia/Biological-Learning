@@ -50,6 +50,7 @@ def sample_couplings(
     J_D_2,
     ferromagnetic: bool = False,
     zero_out_cylinder_contribution: bool = False,
+    sparsity: float = 1.0,
 ):
     """
     :param zero_out_cylinder_contribution: if True, the coupligs in the left rectangle
@@ -59,7 +60,10 @@ def sample_couplings(
         J = torch.zeros((H2, H2), device=device, dtype=DTYPE)
     else:
         J = torch.randn(H2, H2, device=device, generator=generator, dtype=DTYPE)
-        J /= torch.sqrt(torch.tensor(H2, device=device, dtype=DTYPE))
+        if sparsity < 1.0:
+            mask = torch.rand(H2, H2, device=device, generator=generator) < sparsity
+            J[~mask] = 0.0
+        J /= torch.sqrt(torch.tensor(H2 * sparsity, device=device, dtype=DTYPE))
     if zero_out_cylinder_contribution:
         J[:H2, :H1] = (
             0  # NOTE: we do this here cause we keep cylinder ferromagnetic couplings!
@@ -322,7 +326,7 @@ class BatchMeIfUCan:
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
-        self.zero_fc_init = False
+        self.zero_fc_init = True
         self.H1 = 0
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
@@ -717,13 +721,13 @@ class BatchMeIfUCan:
         :return: shape (B, L+1, H)
         """
         # rescale importance of wrong class prototypes in wback field, while keeping total field roughly the same
-        state[:, -2, : self.C][state[:, -2, : self.C] == -1] = -1 / self.root_C
-        state[:, -2, : self.C] = state[:, -2, : self.C] * self.root_C / 2
-        # state[:, -2, : self.C] = torch.where(
-        #     state[:, -2, : self.C] == -1,
-        #     -0.5,
-        #     state[:, -2, : self.C] * (self.root_C / 2),
-        # )
+        # state[:, -2, : self.C][state[:, -2, : self.C] == -1] = -1 / self.root_C
+        # state[:, -2, : self.C] = state[:, -2, : self.C] * self.root_C / 2
+        state[:, -2, : self.C] = torch.where(
+            state[:, -2, : self.C] == -1,
+            -0.5,
+            state[:, -2, : self.C] * (self.root_C / 2),
+        )
 
         state_unfolded = (
             state.unfold(1, 3, 1).transpose(-2, -1).flatten(2)
@@ -839,7 +843,7 @@ class BatchMeIfUCan:
         else:
             pass
 
-        self.symmetrize_fc = False
+        self.symmetrize_fc = True
         if self.symmetrize_fc and self.fc_left:
             assert self.L == 2
             self.couplings[0, :, 2 * self.H : 3 * self.H] = (
