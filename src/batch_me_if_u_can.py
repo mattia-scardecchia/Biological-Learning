@@ -843,7 +843,7 @@ class BatchMeIfUCan:
         else:
             pass
 
-        self.symmetrize_fc = True
+        self.symmetrize_fc = False
         if self.symmetrize_fc and self.fc_left:
             assert self.L == 2
             self.couplings[0, :, 2 * self.H : 3 * self.H] = (

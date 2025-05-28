@@ -25,10 +25,10 @@ lambda_x: 0.0
 lambda_y: 1000.0
 lambda_l: 1.0
 lambda_r: ${lambda_l}
-lambda_internal: 1.0
+lambda_internal: [1.0, 0.0]
 lambda_fc: 1.0
 lambda_wback_skip: [0.0]
-lambda_wback: 2.5  # (/100 if buggy)
+lambda_wback: 2.0  # (/100 if buggy)
 lambda_input_skip: [2.0, 0.0]
 lambda_input_output_skip: 0.0  # multiplied by L
 lambda_wforth_skip: [0.0]
@@ -64,10 +64,10 @@ weight_decay_input_skip: 0.0
 weight_decay_input_output_skip: 0.005
 
 # Phases
-num_epochs_warmup: 5
-num_epochs_couplings: 20
+num_epochs_warmup: 10
+num_epochs_couplings: 40
 num_epochs_full: 0
-num_epochs_tuning: 10
+num_epochs_tuning: 20
 
 begin_curriculum: 1.0  # in [0,1). if >= 1, no curriculum. affects second phase only
 p_curriculum: 0.5    # affects second phase only
