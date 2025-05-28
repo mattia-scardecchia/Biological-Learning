@@ -179,8 +179,9 @@ def parse_config(cfg):
         threshold = cfg.threshold
     except Exception:
         threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
+    J_D = [cfg.J_D] * cfg.num_layers if isinstance(cfg.J_D, float) else cfg.J_D
     for i in range(cfg.num_layers):
-        threshold[i] = threshold[i] + cfg.J_D
+        threshold[i] = threshold[i] + J_D[i]
     try:
         lambda_left = cfg.lambda_left
     except Exception:

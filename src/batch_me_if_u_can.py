@@ -42,8 +42,8 @@ def sample_readout_weights(N, C, device, generator):
 
 
 def sample_couplings(
-    N,
-    H,
+    H1,
+    H2,
     device,
     generator,
     J_D_1,
@@ -56,17 +56,17 @@ def sample_couplings(
     of size (H, N) (drawing from neurons in the cylinder) are set to 0.
     """
     if ferromagnetic:
-        J = torch.zeros((H, H), device=device, dtype=DTYPE)
+        J = torch.zeros((H2, H2), device=device, dtype=DTYPE)
     else:
-        J = torch.randn(H, H, device=device, generator=generator, dtype=DTYPE)
-        J /= torch.sqrt(torch.tensor(H, device=device, dtype=DTYPE))
+        J = torch.randn(H2, H2, device=device, generator=generator, dtype=DTYPE)
+        J /= torch.sqrt(torch.tensor(H2, device=device, dtype=DTYPE))
     if zero_out_cylinder_contribution:
-        J[:H, :N] = (
+        J[:H2, :H1] = (
             0  # NOTE: we do this here cause we keep cylinder ferromagnetic couplings!
         )
-    for i in range(N):
+    for i in range(H1):
         J[i, i] = J_D_1
-    for i in range(N, H):
+    for i in range(H1, H2):
         J[i, i] = J_D_2
     return J
 
@@ -183,6 +183,8 @@ class BatchMeIfUCan:
             weight_decay_input_skip = [weight_decay_input_skip] * num_layers
         if isinstance(lambda_input_skip, float):
             lambda_input_skip = [lambda_input_skip] * num_layers
+        if isinstance(J_D, float):
+            J_D = [J_D] * num_layers
         assert len(lambda_input_skip) == num_layers
 
         self.L = num_layers
@@ -243,7 +245,7 @@ class BatchMeIfUCan:
         self.couplings = self.initialize_couplings(
             fc_left=fc_left, fc_right=fc_right
         )  # L+1, H, 3H
-        self.symmetrize_W()
+        self.symmetrize_couplings()
         self.prepare_tensors(
             lr,
             weight_decay,
@@ -320,6 +322,8 @@ class BatchMeIfUCan:
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
+        self.zero_fc_init = False
+        self.H1 = 0
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
         # First Layer
@@ -332,7 +336,7 @@ class BatchMeIfUCan:
                     self.generator,
                     self.lambda_left[0] / self.lambda_fc[0],
                     0,
-                    not fc_left,
+                    (not fc_left or self.zero_fc_init),
                 )
                 * self.lambda_fc[0]
             )
@@ -347,12 +351,12 @@ class BatchMeIfUCan:
         couplings_buffer.append(J_x)
         couplings_buffer.append(
             sample_couplings(
-                self.N,
+                self.H1,
                 self.H,
                 self.device,
                 self.generator,
-                self.J_D,
-                self.J_D,
+                self.J_D[0],
+                self.J_D[0],
                 False,
             )
             * self.lambda_internal[0]
@@ -360,13 +364,13 @@ class BatchMeIfUCan:
         if self.L > 1:  # il L == 1, right couplings will be set later (W_back)
             couplings_buffer.append(
                 sample_couplings(
-                    self.N,
+                    self.H1,
                     self.H,
                     self.device,
                     self.generator,
+                    0,
                     self.lambda_right[0] / self.lambda_fc[0],
-                    self.lambda_right[0] / self.lambda_fc[0],
-                    not fc_right,
+                    (not fc_right or self.zero_fc_init),
                     self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[0]
@@ -376,38 +380,38 @@ class BatchMeIfUCan:
         for idx in range(1, self.L - 1):
             couplings_buffer.append(
                 sample_couplings(
-                    self.N,
+                    self.H1,
                     self.H,
                     self.device,
                     self.generator,
+                    0,
                     self.lambda_left[idx] / self.lambda_fc[idx],
-                    self.lambda_left[idx] / self.lambda_fc[idx],
-                    not fc_left,
+                    (not fc_left or self.zero_fc_init),
                     self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[idx]
             )
             couplings_buffer.append(
                 sample_couplings(
-                    self.N,
+                    self.H1,
                     self.H,
                     self.device,
                     self.generator,
-                    self.J_D,
-                    self.J_D,
+                    self.J_D[idx],
+                    self.J_D[idx],
                     False,
                 )
                 * self.lambda_internal[idx]
             )
             couplings_buffer.append(
                 sample_couplings(
-                    self.N,
+                    self.H1,
                     self.H,
                     self.device,
                     self.generator,
+                    0,
                     self.lambda_right[idx] / self.lambda_fc[idx],
-                    self.lambda_right[idx] / self.lambda_fc[idx],
-                    not fc_right,
+                    (not fc_right or self.zero_fc_init),
                     self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[idx]
@@ -417,25 +421,25 @@ class BatchMeIfUCan:
         if self.L > 1:  # il L == 1, left couplings have been set before
             couplings_buffer.append(
                 sample_couplings(
-                    self.N,
+                    self.H1,
                     self.H,
                     self.device,
                     self.generator,
+                    0,
                     self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
-                    self.lambda_left[self.L - 1] / self.lambda_fc[self.L - 1],
-                    not fc_left,
+                    (not fc_left or self.zero_fc_init),
                     self.zero_out_cylinder_contribution,
                 )
                 * self.lambda_fc[self.L - 1]
             )
             couplings_buffer.append(
                 sample_couplings(
-                    self.N,
+                    self.H1,
                     self.H,
                     self.device,
                     self.generator,
-                    self.J_D,
-                    self.J_D,
+                    self.J_D[self.L - 1],
+                    self.J_D[self.L - 1],
                     False,
                 )
                 * self.lambda_internal[self.L - 1]
@@ -712,11 +716,13 @@ class BatchMeIfUCan:
         :param state: shape (B, L+3, H)
         :return: shape (B, L+1, H)
         """
-        # # rescale importance of wrong class prototypes in wback field, while keeping total field roughly the same
+        # rescale importance of wrong class prototypes in wback field, while keeping total field roughly the same
         state[:, -2, : self.C][state[:, -2, : self.C] == -1] = -1 / self.root_C
         state[:, -2, : self.C] = state[:, -2, : self.C] * self.root_C / 2
         # state[:, -2, : self.C] = torch.where(
-        #     state[:, -2, : self.C] == -1, -0.5, self.root_C / 2
+        #     state[:, -2, : self.C] == -1,
+        #     -0.5,
+        #     state[:, -2, : self.C] * (self.root_C / 2),
         # )
 
         state_unfolded = (
@@ -740,9 +746,51 @@ class BatchMeIfUCan:
         fields[:, -1, : self.C] += torch.einsum(
             "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
         )
+
+        assert self.L == 2
+        # beta = 0.3
+        # if ignore_right not in [1]:
+        #     fields[:, 0, :] += torch.einsum(
+        #         "hh,bh->bh",
+        #         self.couplings[0, :, 2 * self.H : 3 * self.H],
+        #         (F.tanh(self.last_fields[:, 1, :] * beta) - state[:, 2, :]),
+        #     )
+        # fields[:, 1, :] += torch.einsum(
+        #     "hh,bh->bh",
+        #     self.couplings[1, :, : self.H],
+        #     (F.tanh(self.last_fields[:, 0, :] * beta) - state[:, 1, :]),
+        # )
+        # state1_masked = torch.where(
+        #     self.mask1[None, :].expand(state.shape[0], -1),
+        #     state[:, 1, :],
+        #     0,
+        # )
+        # state2_masked = torch.where(
+        #     self.mask2[None, :].expand(state.shape[0], -1),
+        #     state[:, 2, :],
+        #     0,
+        # )
+        # if ignore_right not in [1]:
+        #     fields[:, 0, :] += torch.einsum(
+        #         "hh,bh->bh",
+        #         self.couplings[0, :, 2 * self.H : 3 * self.H],
+        #         (state2_masked - state[:, 2, :]),
+        #     )
+        # fields[:, 1, :] += torch.einsum(
+        #     "hh,bh->bh",
+        #     self.couplings[1, :, : self.H],
+        #     (state1_masked - state[:, 1, :]),
+        # )
+
+        # state[:, -2, : self.C] = torch.where(
+        #     state[:, -2, : self.C] == -0.5,
+        #     -1.0,
+        #     state[:, -2, : self.C] / (self.root_C / 2),
+        # )
+        # self.last_fields = fields.clone()
         return fields
 
-    def symmetrize_W(self):
+    def symmetrize_couplings(self):
         if self.symmetric_W == "buggy":
             self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = (
                 self.W_forth.T
@@ -790,6 +838,13 @@ class BatchMeIfUCan:
             )
         else:
             pass
+
+        self.symmetrize_fc = False
+        if self.symmetrize_fc and self.fc_left:
+            assert self.L == 2
+            self.couplings[0, :, 2 * self.H : 3 * self.H] = (
+                self.couplings[1, :, : self.H].T * self.lambda_fc[0] / self.lambda_fc[1]
+            )
 
     def perceptron_rule(
         self,
@@ -858,7 +913,7 @@ class BatchMeIfUCan:
             + delta_input_output_skip
         )
 
-        self.symmetrize_W()  # W_back <- W_forth (with appropriate scaling)
+        self.symmetrize_couplings()  # W_back <- W_forth (with appropriate scaling)
         return is_unstable
 
     def relax(
@@ -868,6 +923,9 @@ class BatchMeIfUCan:
         ignore_right: int,
     ):
         sweeps = 0
+        # self.last_fields = torch.zeros_like(state[:, 1:-1, :], device=self.device)
+        # self.mask1 = torch.rand_like(state[0, 1, :], dtype=torch.float32) < 0.5
+        # self.mask2 = torch.rand_like(state[0, 2, :], dtype=torch.float32) < 0.5
         while sweeps < max_steps:
             ir = ignore_right if sweeps >= self.L else 1
             fields = self.local_field(state, ignore_right=ir)

@@ -218,7 +218,7 @@ def main(cfg):
         model.wforth2wback(model.W_forth)
     )  # because we had set it to 0. as if we were initializing wback and wforth anew, make them symmetric
     model.symmetric_W = cfg.symmetric_W
-    model.symmetrize_W()  # for plots with buggy option
+    model.symmetrize_couplings()  # for plots with buggy option
 
     # === Phase 2: Train the couplings only, with feedback from the readout ===
     lr = lr_cfg.clone()
