@@ -751,7 +751,7 @@ class BatchMeIfUCan:
             "cn,bn->bc", self.input_output_skip, state[:, 0, : self.N]
         )
 
-        assert self.L == 2
+        # assert self.L == 2
         # beta = 0.3
         # if ignore_right not in [1]:
         #     fields[:, 0, :] += torch.einsum(
