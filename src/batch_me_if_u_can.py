@@ -863,8 +863,13 @@ class BatchMeIfUCan:
                 self.beta_ce * (fields * neurons - self.threshold_tensor[None, :, None])
             )  # omit a beta_ce factor to decouple slope and lr
         else:
+            stats_correction = self.fields_stats["mean"].abs() - self.fields_stats[
+                "mean"
+            ].abs().mean(dim=-1, keepdim=True)
+            stats_correction[:, -1, :] = 0
             is_unstable = (
-                (fields * neurons) <= self.threshold_tensor[None, :, None]
+                (fields * neurons)
+                <= self.threshold_tensor[None, :, None] + stats_correction
             ).float()
         delta = (
             self.lr_tensor

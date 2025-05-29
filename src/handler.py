@@ -73,6 +73,37 @@ class Handler:
             "similarity_to_input": (similarity_to_input + 1) / 2,  # L,
         }
 
+    def compute_fields_stats(self, x, y, max_steps):
+        fields = []
+        num_samples = x.shape[0]
+        batch_size = min(1024, num_samples)
+        for i in range(0, num_samples, batch_size):
+            x_batch = x[i : i + batch_size]
+            y_batch = y[i : i + batch_size]
+            logits_batch, states_batch, readout_batch = self.classifier.inference(
+                x_batch, max_steps
+            )
+            states_batch_tensor = self.classifier.initialize_state(
+                x_batch, y_batch, "zeros"
+            )
+            states_batch_tensor[:, : self.classifier.L, :] = states_batch
+            states_batch_tensor[:, self.classifier.L, :] = readout_batch
+            fields_batch = self.classifier.local_field(
+                states_batch_tensor, ignore_right=4
+            )
+            fields.append(fields_batch)
+        fields = torch.cat(fields, dim=0)  # B, L+1, H
+        fields_mean = fields.mean(dim=0, keepdim=True)
+        fields_std = fields.std(dim=0, keepdim=True)
+        fields_max = fields.max(dim=0, keepdim=True).values
+        fields_min = fields.min(dim=0, keepdim=True).values
+        self.classifier.fields_stats = {
+            "mean": fields_mean,
+            "std": fields_std,
+            "max": fields_max,
+            "min": fields_min,
+        }
+
     def train_epoch(
         self,
         inputs: torch.Tensor,
@@ -225,6 +256,9 @@ class Handler:
         self.flush_logs()
 
         for epoch in range(num_epochs):
+            if epoch % 5 == 0:
+                self.compute_fields_stats(inputs, targets, max_steps)
+
             train_metrics = self.evaluate(inputs, targets, max_steps)
             self.log(train_metrics, type="train")
             if epoch / num_epochs >= self.begin_curriculum:
