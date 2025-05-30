@@ -45,10 +45,8 @@ def main(cfg):
         "J_D": cfg.get("J_D_values", [cfg.J_D]),
         "lambda_wback": cfg.get("lambda_wback_values", [cfg.lambda_wback]),
         "max_steps": cfg.get("max_steps_values", [cfg.max_steps]),
-        "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold_hidden]),
-        "threshold_readout": cfg.get(
-            "threshold_readout_values", [cfg.threshold_readout]
-        ),
+        "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold[0]]),
+        "threshold_readout": cfg.get("threshold_readout_values", [cfg.threshold[-1]]),
         "lr_J": cfg.get("lr_J_values", [cfg.lr_J]),
         "weight_decay_J": cfg.get("weight_decay_J_values", [cfg.weight_decay_J]),
         "beta_ce": cfg.get("beta_ce_values", [cfg.beta_ce]),
