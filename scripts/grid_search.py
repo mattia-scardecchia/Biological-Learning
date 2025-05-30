@@ -24,7 +24,7 @@ from src.utils import (
 )
 
 
-@hydra.main(config_path="../configs", config_name="train", version_base="1.3")
+@hydra.main(config_path="../configs", config_name="baseline_1layer", version_base="1.3")
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
     lr, weight_decay, threshold, lambda_left, lambda_right = parse_config(cfg)
