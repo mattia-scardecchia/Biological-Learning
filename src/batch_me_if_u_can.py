@@ -51,6 +51,7 @@ def sample_couplings(
     ferromagnetic: bool = False,
     zero_out_cylinder_contribution: bool = False,
     sparsity: float = 1.0,
+    symmetric: bool = False,
 ):
     """
     :param zero_out_cylinder_contribution: if True, the coupligs in the left rectangle
@@ -72,6 +73,8 @@ def sample_couplings(
         J[i, i] = J_D_1
     for i in range(H1, H2):
         J[i, i] = J_D_2
+    if symmetric:
+        J = (J + J.T) / 2
     return J
 
 
@@ -130,6 +133,7 @@ class BatchMeIfUCan:
         fc_right: bool,
         fc_input: bool,
         symmetric_W: bool,
+        symmetric_J_init: bool,
         double_dynamics: bool,
         double_update: bool,
         use_local_ce: bool,
@@ -170,9 +174,9 @@ class BatchMeIfUCan:
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
         if isinstance(lambda_fc, float):
-            lambda_fc = (
-                [lambda_fc] * num_layers
-            )  # 0-th element is for when fc_input is True (otherwise ignored)
+            lambda_fc = [
+                lambda_fc
+            ] * num_layers  # 0-th element is for when fc_input is True (otherwise ignored)
         if isinstance(lambda_wforth_skip, float):
             lambda_wforth_skip = [lambda_wforth_skip] * (num_layers - 1)
         if isinstance(lambda_wback_skip, float):
@@ -204,6 +208,7 @@ class BatchMeIfUCan:
         self.lambda_internal = torch.tensor(lambda_internal, device=device)
         self.lambda_fc = torch.tensor(lambda_fc, device=device)
         self.symmetric_W = symmetric_W
+        self.symmetric_J_init = symmetric_J_init
         self.init_mode = init_mode
         self.init_noise = init_noise
         self.double_dynamics = double_dynamics
@@ -281,6 +286,7 @@ class BatchMeIfUCan:
             f"fc_right={fc_right},\n"
             f"fc_input={fc_input},\n"
             f"symmetric_W={symmetric_W},\n"
+            f"symmetric_J_init={symmetric_J_init},\n"
             f"double_dynamics={double_dynamics},\n"
             f"double_update={double_update},\n"
             f"use_local_ce={use_local_ce},\n"
@@ -303,7 +309,9 @@ class BatchMeIfUCan:
         self.lr_tensor = self.build_lr_tensor(lr)
         self.weight_decay_tensor = self.build_weight_decay_tensor(weight_decay)
         self.threshold_tensor = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
+        self.ignore_right_mask = (
+            self.build_ignore_right_mask()
+        )  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
         self.lr_input_skip_tensor = (
             torch.ones_like(self.input_skip, device=self.device)
@@ -341,6 +349,7 @@ class BatchMeIfUCan:
                     self.lambda_left[0] / self.lambda_fc[0],
                     0,
                     (not fc_left or self.zero_fc_init),
+                    symmetric=self.symmetric_J_init,
                 )
                 * self.lambda_fc[0]
             )
@@ -362,6 +371,7 @@ class BatchMeIfUCan:
                 self.J_D[0],
                 self.J_D[0],
                 False,
+                symmetric=self.symmetric_J_init,
             )
             * self.lambda_internal[0]
         )
@@ -376,6 +386,7 @@ class BatchMeIfUCan:
                     self.lambda_right[0] / self.lambda_fc[0],
                     (not fc_right or self.zero_fc_init),
                     self.zero_out_cylinder_contribution,
+                    symmetric=self.symmetric_J_init,
                 )
                 * self.lambda_fc[0]
             )
@@ -404,6 +415,7 @@ class BatchMeIfUCan:
                     self.J_D[idx],
                     self.J_D[idx],
                     False,
+                    symmetric=self.symmetric_J_init,
                 )
                 * self.lambda_internal[idx]
             )
@@ -445,6 +457,7 @@ class BatchMeIfUCan:
                     self.J_D[self.L - 1],
                     self.J_D[self.L - 1],
                     False,
+                    symmetric=self.symmetric_J_init,
                 )
                 * self.lambda_internal[self.L - 1]
             )
@@ -458,7 +471,6 @@ class BatchMeIfUCan:
                 value=0,
             )  # (H, C) -> (H, H)
         )
-
         # Readout Layer
         W_forth = W_initial.clone().T * self.lambda_left[-1] / self.root_H
         couplings_buffer.append(
@@ -699,7 +711,9 @@ class BatchMeIfUCan:
             (0, H - C, 0, 0),
             mode="constant",
             value=0,
-        ).unsqueeze(1)  # (B, C) -> (B, 1, H)
+        ).unsqueeze(
+            1
+        )  # (B, C) -> (B, 1, H)
         state = torch.cat(
             [
                 x_padded,

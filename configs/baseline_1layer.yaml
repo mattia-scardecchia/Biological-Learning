@@ -30,6 +30,7 @@ fc_left: false
 fc_right: false
 fc_input: false
 symmetric_W: false
+symmetric_J_init: false
 double_dynamics: false
 double_update: false
 use_local_ce: false

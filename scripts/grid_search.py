@@ -51,6 +51,7 @@ def main(cfg):
         "weight_decay_J": cfg.get("weight_decay_J_values", [cfg.weight_decay_J]),
         "beta_ce": cfg.get("beta_ce_values", [cfg.beta_ce]),
         "double_dynamics": cfg.get("double_dynamics_values", [cfg.double_dynamics]),
+        "symmetric_J_init": cfg.get("symmetric_J_init_values", [cfg.symmetric_J_init]),
     }
 
     results_file = os.path.join(output_dir, "grid_search_results.csv")
@@ -117,6 +118,7 @@ def main(cfg):
             "init_mode": cfg.init_mode,
             "init_noise": cfg.init_noise,
             "symmetric_W": cfg.symmetric_W,
+            "symmetric_J_init": cfg.symmetric_J_init,
             "double_dynamics": double_dynamics,
             "double_update": cfg.double_update,
             "use_local_ce": cfg.use_local_ce,
