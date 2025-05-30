@@ -58,8 +58,8 @@ skip_couplings: false
 skip_fields: false
 data:
   dataset: mnist
-  P: 600
-  P_eval: 300
+  P: 6000
+  P_eval: 1000
   synthetic:
     C: 10
     p: 0.35
