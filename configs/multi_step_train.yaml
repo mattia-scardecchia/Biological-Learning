@@ -13,7 +13,7 @@ device: 'mps'
 # Network and Relaxation
 N: 100
 H: 300
-num_layers: 2
+num_layers: 3
 J_D: 0.5
 max_steps: 7                                   # full sweeps over the network (relaxation)
 init_mode: "zeros"                             # "input", "zeros"
@@ -25,19 +25,22 @@ lambda_x: 0.0
 lambda_y: 1000.0
 lambda_l: 1.0
 lambda_r: ${lambda_l}
-lambda_internal: [1.0, 0.0]
+lambda_internal: [0.0, 0.0, 0.0]
 lambda_fc: 1.0
-lambda_wback_skip: [0.0]
+lambda_wback_skip: [0.0, 0.0]
 lambda_wback: 2.0  # (/100 if buggy)
-lambda_input_skip: [2.0, 0.0]
+lambda_input_skip: [2.0, 0.0, 0.0]
 lambda_input_output_skip: 0.0  # multiplied by L
-lambda_wforth_skip: [0.0]
+lambda_wforth_skip: [0.0, 0.0]
 lambda_wforth: 1.0
 
 fc_left: true
 fc_right: false
 fc_input: false
+zero_fc_init: true
+symmetrize_fc: false
 symmetric_W: false
+
 double_dynamics: false
 double_update: false
 use_local_ce: true
@@ -46,8 +49,8 @@ lambda_cylinder: null
 
 # Perceptron Rule
 batch_size: 16
-lr: [0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
-threshold: [1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
+lr: [0.03, 0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
+threshold: [1.0, 1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
 # weight_decay: [0.005, 0.005, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
 lr_input_output_skip: 0.1
 lr_input_skip: 0.03

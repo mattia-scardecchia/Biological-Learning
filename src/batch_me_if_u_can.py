@@ -149,6 +149,8 @@ class BatchMeIfUCan:
         weight_decay_input_skip: float | list[float],
         lr_input_output_skip: float,
         weight_decay_input_output_skip: float,
+        symmetrize_fc: bool,
+        zero_fc_init: bool,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -233,9 +235,12 @@ class BatchMeIfUCan:
         self.weight_decay_input_output_skip = torch.tensor(
             weight_decay_input_output_skip, device=device
         )
-        # TODO: expose these to config
-        self.zero_out_cylinder_contribution = False  # TODO: check this
-        self.learn_free_ferromagnetic = False  # TODO: check this
+        self.zero_out_cylinder_contribution = False  # TODO: remove this
+        self.learn_free_ferromagnetic = (
+            False  # TODO: check and enable this (or remove it)
+        )
+        self.zero_fc_init = zero_fc_init
+        self.symmetrize_fc = symmetrize_fc
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_N = torch.sqrt(torch.tensor(N, device=device))
@@ -332,7 +337,6 @@ class BatchMeIfUCan:
 
     def initialize_couplings(self, fc_left: bool, fc_right: bool):
         couplings_buffer = []
-        self.zero_fc_init = True
         self.H1 = 0
         # fc_left = fc_right = 0  # hack to set ferromagnetic to True everywhere
 
@@ -851,12 +855,13 @@ class BatchMeIfUCan:
         else:
             pass
 
-        self.symmetrize_fc = False
         if self.symmetrize_fc and self.fc_left:
-            assert self.L == 2
-            self.couplings[0, :, 2 * self.H : 3 * self.H] = (
-                self.couplings[1, :, : self.H].T * self.lambda_fc[0] / self.lambda_fc[1]
-            )
+            for l in range(self.L - 1):
+                self.couplings[l, :, 2 * self.H : 3 * self.H] = (
+                    self.couplings[l + 1, :, : self.H].T
+                    * self.lambda_fc[l]
+                    / self.lambda_fc[l + 1]
+                )
 
     def perceptron_rule(
         self,
