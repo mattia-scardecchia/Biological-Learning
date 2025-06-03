@@ -44,6 +44,9 @@ def main(cfg):
         "H": cfg.get("H_values", [cfg.H]),
         "J_D": cfg.get("J_D_values", [cfg.J_D]),
         "lambda_wback": cfg.get("lambda_wback_values", [cfg.lambda_wback]),
+        "lambda_input_skip": cfg.get(
+            "lambda_input_skip_values", [cfg.lambda_input_skip]
+        ),
         "max_steps": cfg.get("max_steps_values", [cfg.max_steps]),
         "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold[0]]),
         "threshold_readout": cfg.get("threshold_readout_values", [cfg.threshold[-1]]),
