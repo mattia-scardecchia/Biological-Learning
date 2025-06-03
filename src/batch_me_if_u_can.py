@@ -138,6 +138,7 @@ class BatchMeIfUCan:
         double_update: bool,
         use_local_ce: bool,
         beta_ce: float,
+        p_update: float,
         lambda_cylinder: float,  # ignored
         lambda_wback_skip: float | list[float],
         lambda_wforth_skip: float | list[float],
@@ -176,9 +177,9 @@ class BatchMeIfUCan:
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
         if isinstance(lambda_fc, float):
-            lambda_fc = (
-                [lambda_fc] * num_layers
-            )  # 0-th element is for when fc_input is True (otherwise ignored)
+            lambda_fc = [
+                lambda_fc
+            ] * num_layers  # 0-th element is for when fc_input is True (otherwise ignored)
         if isinstance(lambda_wforth_skip, float):
             lambda_wforth_skip = [lambda_wforth_skip] * (num_layers - 1)
         if isinstance(lambda_wback_skip, float):
@@ -217,6 +218,7 @@ class BatchMeIfUCan:
         self.double_update = double_update
         self.use_local_ce = use_local_ce
         self.beta_ce = beta_ce
+        self.p_update = p_update
         self.lambda_wback_skip = torch.tensor(lambda_wback_skip, device=device)
         self.lambda_wforth_skip = torch.tensor(lambda_wforth_skip, device=device)
         self.lr_wforth_skip = torch.tensor(lr_wforth_skip, device=device)
@@ -296,6 +298,7 @@ class BatchMeIfUCan:
             f"double_update={double_update},\n"
             f"use_local_ce={use_local_ce},\n"
             f"beta_ce={beta_ce},\n"
+            f"p_update={p_update},\n"
             f"device={device},\n"
             f"seed={seed},\n"
         )
@@ -314,7 +317,9 @@ class BatchMeIfUCan:
         self.lr_tensor = self.build_lr_tensor(lr)
         self.weight_decay_tensor = self.build_weight_decay_tensor(weight_decay)
         self.threshold_tensor = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
+        self.ignore_right_mask = (
+            self.build_ignore_right_mask()
+        )  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
         self.lr_input_skip_tensor = (
             torch.ones_like(self.input_skip, device=self.device)
@@ -711,7 +716,9 @@ class BatchMeIfUCan:
             (0, H - C, 0, 0),
             mode="constant",
             value=0,
-        ).unsqueeze(1)  # (B, C) -> (B, 1, H)
+        ).unsqueeze(
+            1
+        )  # (B, C) -> (B, 1, H)
         state = torch.cat(
             [
                 x_padded,
@@ -946,8 +953,7 @@ class BatchMeIfUCan:
         while sweeps < max_steps:
             ir = ignore_right if sweeps >= self.L else 1
             fields = self.local_field(state, ignore_right=ir)
-            p_update = 0.8
-            update_mask = torch.rand_like(fields) < p_update
+            update_mask = torch.rand_like(fields) < self.p_update
             state[:, 1:-1, :] = torch.where(
                 update_mask,
                 torch.sign(fields),
@@ -960,11 +966,10 @@ class BatchMeIfUCan:
 
     def double_relax(self, state, max_sweeps):
         sweeps = 0
-        p_update = 0.8
         while sweeps < max_sweeps:
             ir = 0 if sweeps >= self.L else 1
             fields = self.local_field(state, ignore_right=ir)
-            update_mask = torch.rand_like(fields) < p_update
+            update_mask = torch.rand_like(fields) < self.p_update
             state[:, 1:-1, :] = torch.where(
                 update_mask,
                 torch.sign(fields),
@@ -977,7 +982,7 @@ class BatchMeIfUCan:
         first_fixed_point = state.clone()
         while sweeps < 2 * max_sweeps:
             fields = self.local_field(state, ignore_right=3)
-            update_mask = torch.rand_like(fields) < p_update
+            update_mask = torch.rand_like(fields) < self.p_update
             state[:, 1:-1, :] = torch.where(
                 update_mask,
                 torch.sign(fields),
