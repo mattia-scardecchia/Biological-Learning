@@ -111,6 +111,8 @@ def main(cfg):
         "weight_decay_input_skip": cfg.weight_decay_input_skip,
         "lr_input_output_skip": cfg.lr_input_output_skip,
         "weight_decay_input_output_skip": cfg.weight_decay_input_output_skip,
+        "zero_fc_init": cfg.zero_fc_init,
+        "symmetrize_fc": cfg.symmetrize_fc,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan

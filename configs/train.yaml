@@ -37,7 +37,10 @@ lambda_wforth: 1.0
 fc_left: true
 fc_right: false
 fc_input: false
+zero_fc_init: true
+symmetrize_fc: false
 symmetric_W: false
+
 double_dynamics: false
 double_update: false
 use_local_ce: true
