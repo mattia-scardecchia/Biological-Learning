@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Optional
+import math
 
 import numpy as np
 import torch
@@ -176,8 +177,17 @@ def load_synthetic_dataset(
     )
 
 
-def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True):
-    # load MNIST dataset
+def prepare_vision_data(
+    dataset_cls,
+    num_labels,
+    num_samples_train,
+    num_samples_eval,
+    N,
+    binarize,
+    seed,
+    shuffle=True,
+    project=True,
+):
     torch.manual_seed(seed)
     transform = transforms.Compose(
         [
@@ -185,12 +195,14 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffl
             transforms.Lambda(lambda x: x.view(-1)),
         ]
     )
-    train_dataset = datasets.MNIST(
+    train_dataset = dataset_cls(
         root="./data", train=True, download=True, transform=transform
     )
-    eval_dataset = datasets.MNIST(
+    eval_dataset = dataset_cls(
         root="./data", train=False, download=True, transform=transform
     )
+    train_sample_shape = train_dataset[0][0].shape
+    train_sample_size = math.prod(train_sample_shape)
 
     # Downsample the datasets
     train_perm = (
@@ -219,13 +231,14 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffl
     train_images = train_images[sort_idx]
 
     # Convert labels to one-hot encoding
-    train_labels = torch.eye(10)[train_labels]
-    eval_labels = torch.eye(10)[eval_labels]
+    train_labels = torch.eye(num_labels)[train_labels]
+    eval_labels = torch.eye(num_labels)[eval_labels]
 
     # Random linear projection and binarization
-    projection_matrix = torch.randn(784, N)
-    train_images = train_images @ projection_matrix
-    eval_images = eval_images @ projection_matrix
+    if project:
+        projection_matrix = torch.randn(train_sample_size, N)
+        train_images = train_images @ projection_matrix
+        eval_images = eval_images @ projection_matrix
     if binarize:
         train_images = torch.sign(train_images)
         eval_images = torch.sign(eval_images)
@@ -246,87 +259,67 @@ def prepare_mnist(num_samples_train, num_samples_eval, N, binarize, seed, shuffl
     )
 
 
-def prepare_cifar(
-    num_samples_train, num_samples_eval, N, binarize, seed, cifar10=True, shuffle=True
+def prepare_mnist(
+    num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True, project=True
 ):
-    torch.manual_seed(seed)
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            # transforms.Grayscale(num_output_channels=1),
-            transforms.Lambda(lambda x: x.view(-1)),
-        ]
+    return prepare_vision_data(
+        datasets.MNIST,
+        10,
+        num_samples_train,
+        num_samples_eval,
+        N,
+        binarize,
+        seed,
+        shuffle,
+        project,
     )
 
-    # Load CIFAR dataset
-    if cifar10:
-        dataset_cls = datasets.CIFAR10
-        num_classes = 10
-    else:
-        dataset_cls = datasets.CIFAR100
-        num_classes = 100
-    train_dataset = dataset_cls(
-        root="./data", train=True, download=True, transform=transform
+
+def prepare_fashionmnist(
+    num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True, project=True
+):
+    return prepare_vision_data(
+        datasets.FashionMNIST,
+        10,
+        num_samples_train,
+        num_samples_eval,
+        N,
+        binarize,
+        seed,
+        shuffle,
+        project,
     )
-    eval_dataset = dataset_cls(
-        root="./data", train=False, download=True, transform=transform
+
+
+def prepare_cifar(
+    num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True, project=True
+):
+    return prepare_vision_data(
+        datasets.CIFAR10,
+        10,
+        num_samples_train,
+        num_samples_eval,
+        N,
+        binarize,
+        seed,
+        shuffle,
+        project,
     )
 
-    # Downsample datasets
-    train_perm = (
-        torch.randperm(len(train_dataset))
-        if shuffle
-        else torch.arange(len(train_dataset))
-    )
-    train_indices = train_perm[:num_samples_train]
-    train_images = torch.stack([train_dataset[i][0] for i in train_indices])
-    train_labels = torch.tensor([train_dataset[i][1] for i in train_indices])
-    eval_perm = (
-        torch.randperm(len(eval_dataset))
-        if shuffle
-        else torch.arange(len(eval_dataset))
-    )
-    eval_indices = eval_perm[:num_samples_eval]
-    eval_images = torch.stack([eval_dataset[i][0] for i in eval_indices])
-    eval_labels = torch.tensor([eval_dataset[i][1] for i in eval_indices])
 
-    # Sort samples by class for better evaluation insights
-    sort_idx = torch.argsort(eval_labels)
-    eval_labels = eval_labels[sort_idx]
-    eval_images = eval_images[sort_idx]
-    sort_idx = torch.argsort(train_labels)
-    train_labels = train_labels[sort_idx]
-    train_images = train_images[sort_idx]
-
-    # Convert labels to one-hot encoding
-    train_labels = torch.eye(num_classes)[train_labels]
-    eval_labels = torch.eye(num_classes)[eval_labels]
-
-    # Random linear projection, and Binarize/Normalize the data
-    projection_matrix = torch.randn(3072, N)
-    # projection_matrix = torch.eye(3072, 3072)
-    train_images = train_images @ projection_matrix
-    eval_images = eval_images @ projection_matrix
-    if binarize:
-        median = train_images.median().item()
-        train_images = torch.sign(train_images - median)
-        eval_images = torch.sign(eval_images - median)
-    else:
-        train_images = (train_images - train_images.min()) / (
-            train_images.max() - train_images.min()
-        )
-        eval_images = (eval_images - eval_images.min()) / (
-            eval_images.max() - eval_images.min()
-        )
-        median = None
-
-    return (
-        train_images.to(DTYPE),
-        train_labels.to(DTYPE),
-        eval_images.to(DTYPE),
-        eval_labels.to(DTYPE),
-        projection_matrix,
-        median,
+def prepare_svhn(
+    num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True, project=True
+):
+    return prepare_vision_data(
+        datasets.SVHN,
+        10,
+        num_samples_train,
+        num_samples_eval,
+        N,
+        binarize,
+        seed,
+        shuffle,
+        project,
     )
 
 
