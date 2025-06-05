@@ -158,7 +158,9 @@ class Handler:
                     eval_batch_size,
                     min(self.classifier.C * 30, eval_batch_size),
                     endpoint=False,
-                ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+                ).astype(
+                    int
+                )  # NOTE: indexing is relative to the eval batch... hacky
                 self.logs["update_representations"].append(
                     metrics["update_states"][idxs, :, :].clone()
                 )
@@ -175,7 +177,9 @@ class Handler:
                 eval_batch_size,
                 min(self.classifier.C * 30, eval_batch_size),
                 endpoint=False,
-            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+            ).astype(
+                int
+            )  # NOTE: indexing is relative to the eval batch... hacky
             self.logs[f"{type}_representations"].append(
                 metrics["fixed_points"][idxs, :, :].clone()
             )
@@ -201,7 +205,8 @@ class Handler:
         num_epochs: int,
         inputs: torch.Tensor,
         targets: torch.Tensor,
-        max_steps: int,
+        max_steps_train: int,
+        max_steps_eval: int,
         batch_size: int,
         eval_interval: int,
         eval_inputs: torch.Tensor,
@@ -225,7 +230,7 @@ class Handler:
         self.flush_logs()
 
         for epoch in range(num_epochs):
-            train_metrics = self.evaluate(inputs, targets, max_steps)
+            train_metrics = self.evaluate(inputs, targets, max_steps_eval)
             self.log(train_metrics, type="train")
             if epoch / num_epochs >= self.begin_curriculum:
                 preds = train_metrics["logits"].argmax(dim=1)  # B,
@@ -239,10 +244,12 @@ class Handler:
                 keep = torch.ones(inputs.shape[0], dtype=torch.bool)
 
             if (epoch + 1) % eval_interval == 0:
-                eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps)
+                eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps_eval)
                 self.log(eval_metrics, type="eval")
 
-            out = self.train_epoch(inputs[keep], targets[keep], max_steps, batch_size)
+            out = self.train_epoch(
+                inputs[keep], targets[keep], max_steps_train, batch_size
+            )
             self.log(out, type="update")
 
             message = (
@@ -268,7 +275,9 @@ class Handler:
             for type in ["update", "train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
-                ).permute(1, 0, 2, 3)  # B, T, L, N
+                ).permute(
+                    1, 0, 2, 3
+                )  # B, T, L, N
                 repr_dict = {
                     idx: repr_tensor[idx, :, :, :].cpu().numpy()
                     for idx in range(repr_tensor.shape[0])

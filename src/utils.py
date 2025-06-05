@@ -159,9 +159,9 @@ def plot_representations_similarity_among_layers(
     """
     if average_inputs:
         # Get a list of all input keys and use one to determine the shape.
-        assert input_key is None, (
-            "input_key should be None when averaging across inputs."
-        )
+        assert (
+            input_key is None
+        ), "input_key should be None when averaging across inputs."
         input_keys = sorted(representations.keys())
         rep0 = representations[input_keys[0]]  # shape: (T, L, N)
     else:

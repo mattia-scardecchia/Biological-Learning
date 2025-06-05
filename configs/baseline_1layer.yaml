@@ -10,7 +10,8 @@ device: cuda
 H: 300
 num_layers: 1
 J_D: 0.5
-max_steps: 7
+max_steps_train: 7
+max_steps_eval: ${max_steps_train}
 init_mode: zeros
 init_noise: 0.0
 lambda_x: 0.0

@@ -47,7 +47,8 @@ def main(cfg):
         "lambda_input_skip": cfg.get(
             "lambda_input_skip_values", [cfg.lambda_input_skip]
         ),
-        "max_steps": cfg.get("max_steps_values", [cfg.max_steps]),
+        "max_steps_train": cfg.get("max_steps_train_values", [cfg.max_steps_train]),
+        "max_steps_eval": cfg.get("max_steps_eval_values", [cfg.max_steps_eval]),
         "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold[0]]),
         "threshold_readout": cfg.get("threshold_readout_values", [cfg.threshold[-1]]),
         "lr_J": cfg.get("lr_J_values", [cfg.lr_J]),
@@ -79,7 +80,8 @@ def main(cfg):
         # symmetric_W = hyperparams["symmetric_W"]
 
         J_D = hyperparams["J_D"]
-        max_steps = hyperparams["max_steps"]
+        max_steps_train = hyperparams["max_steps_train"]
+        max_steps_eval = hyperparams["max_steps_eval"]
         H = hyperparams["H"]
         beta_ce = hyperparams["beta_ce"]
         double_dynamics = hyperparams["double_dynamics"]
@@ -180,7 +182,8 @@ def main(cfg):
             cfg.num_epochs,
             train_inputs,
             train_targets,
-            max_steps,
+            max_steps_train,
+            max_steps_eval,
             cfg.batch_size,
             eval_interval=cfg.eval_interval,
             eval_inputs=eval_inputs,

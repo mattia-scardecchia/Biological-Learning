@@ -64,7 +64,8 @@ def plot_representation_similarity(logs, save_dir, cfg):
 
 
 def plot_fields_breakdown(handler: Handler, cfg, save_dir, title, x, y):
-    for max_steps in [0, cfg.max_steps]:
+    max_steps_val = max(cfg.max_steps_train, cfg.max_steps_eval)
+    for max_steps in [0, max_steps_val]:
         for ignore_right in [0, 1]:
             for plot_total in [False, True]:
                 fig, axs = handler.fields_histogram(
@@ -290,7 +291,8 @@ def main(cfg):
         cfg.num_epochs,
         train_inputs,
         train_targets,
-        cfg.max_steps,
+        cfg.max_steps_train,
+        cfg.max_steps_eval,
         cfg.batch_size,
         eval_interval=cfg.eval_interval,
         eval_inputs=eval_inputs,
@@ -320,7 +322,7 @@ def main(cfg):
         )
 
     # Evaluate final model and plot Accuracy
-    eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
+    eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps_eval)
     logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
     t2 = time.time()
     logging.info(f"Evaluation took {t2 - t1:.2f} seconds")
