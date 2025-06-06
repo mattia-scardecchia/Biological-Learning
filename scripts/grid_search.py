@@ -80,6 +80,7 @@ def main(cfg):
         # symmetric_W = hyperparams["symmetric_W"]
 
         J_D = hyperparams["J_D"]
+        lambda_input_skip = hyperparams["lambda_input_skip"]
         max_steps_train = hyperparams["max_steps_train"]
         max_steps_eval = hyperparams["max_steps_eval"]
         H = hyperparams["H"]
@@ -138,7 +139,7 @@ def main(cfg):
             "lambda_wforth_skip": cfg.lambda_wforth_skip,
             "lr_wforth_skip": cfg.lr_wforth_skip,
             "weight_decay_wforth_skip": cfg.weight_decay_wforth_skip,
-            "lambda_input_skip": cfg.lambda_input_skip,
+            "lambda_input_skip": lambda_input_skip,
             "lambda_input_output_skip": cfg.lambda_input_output_skip,
             "lr_input_skip": cfg.lr_input_skip,
             "weight_decay_input_skip": cfg.weight_decay_input_skip,
