@@ -415,6 +415,9 @@ def plot_couplings_asymmetry_histograms(logs, time_indexes, bins=30):
         ax = axes_int[l]
         for t in time_indexes:
             data = asymmetry_histogram(internal[t, l])
+            asymmetry_coefficients = [
+                global_asymmetry_metric(internal[t, l]) for t in time_indexes
+            ]
             asymmetry_global = global_asymmetry_metric(internal[t, l])
             ax.hist(
                 data,
