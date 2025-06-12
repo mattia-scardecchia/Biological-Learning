@@ -23,7 +23,7 @@ lambda_fc: 1.0
 lambda_wback_skip: []
 lambda_wback: 0.5
 lambda_input_skip:
-- 2.0
+- 5.0
 lambda_input_output_skip: 0.0
 lambda_wforth_skip: []
 lambda_wforth: 1.0
