@@ -37,7 +37,7 @@ symmetric_J_init: false
 double_dynamics: false
 double_update: false
 use_local_ce: false
-p_update: 0.8
+p_update: 1.0
 beta_ce: 10.0
 lambda_cylinder: null
 num_epochs: 40
