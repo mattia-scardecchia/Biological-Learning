@@ -151,6 +151,8 @@ class BatchMeIfUCan:
         lr_input_output_skip: float,
         weight_decay_input_output_skip: float,
         symmetrize_fc: bool,
+        symmetric_threshold_internal_couplings: bool,
+        symmetrize_internal_couplings: bool,
         zero_fc_init: bool,
         device: str = "cpu",
         seed: Optional[int] = None,
@@ -240,6 +242,10 @@ class BatchMeIfUCan:
         )
         self.zero_fc_init = zero_fc_init
         self.symmetrize_fc = symmetrize_fc
+        self.symmetric_threshold_internal_couplings = (
+            symmetric_threshold_internal_couplings
+        )
+        self.symmetrize_internal_couplings = symmetrize_internal_couplings
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_N = torch.sqrt(torch.tensor(N, device=device))
@@ -864,6 +870,12 @@ class BatchMeIfUCan:
                     / self.lambda_fc[l + 1]
                 )
 
+        if self.symmetrize_internal_couplings:
+            self.couplings[:-1, :, self.H : 2 * self.H] = (
+                self.couplings[:-1, :, self.H : 2 * self.H]
+                + self.couplings[:-1, :, self.H : 2 * self.H].transpose(1, 2)
+            ) / 2
+
     def perceptron_rule(
         self,
         state: torch.Tensor,
@@ -889,6 +901,19 @@ class BatchMeIfUCan:
         )
         if delta_mask is not None:
             delta = delta * delta_mask
+
+        if self.symmetric_threshold_internal_couplings:
+            delta[:-1, :, self.H : 2 * self.H] = torch.where(
+                (delta[:-1, :, self.H : 2 * self.H] > 0)
+                & (delta[:-1, :, self.H : 2 * self.H].transpose(1, 2) > 0),
+                (
+                    delta[:-1, :, self.H : 2 * self.H]
+                    + delta[:-1, :, self.H : 2 * self.H].transpose(1, 2)
+                )
+                / 2,
+                0,
+            )
+
         self.couplings = self.couplings * (1 - self.weight_decay_tensor) + delta
 
         delta_skip = (

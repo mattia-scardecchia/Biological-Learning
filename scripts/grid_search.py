@@ -148,6 +148,8 @@ def main(cfg):
             "weight_decay_input_output_skip": cfg.weight_decay_input_output_skip,
             "zero_fc_init": cfg.zero_fc_init,
             "symmetrize_fc": cfg.symmetrize_fc,
+            "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
+            "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
             "H": H,
         }
         model_cls = BatchMeIfUCan

@@ -80,3 +80,5 @@ data:
     L: 1
     width: 300
     binarize: true
+symmetric_threshold_internal_couplings: false
+symmetrize_internal_couplings: false

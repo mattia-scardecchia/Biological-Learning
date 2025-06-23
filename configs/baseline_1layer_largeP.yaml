@@ -5,10 +5,10 @@ logging:
   level: INFO
 name: prova
 seed: 17
-device: mps
+device: cuda
 'N': 100
 H: 300
-num_layers: 2
+num_layers: 1
 J_D: 0.5
 max_steps_train: 7
 max_steps_eval: ${max_steps_train}
@@ -18,19 +18,16 @@ lambda_x: 0.0
 lambda_y: 1000.0
 lambda_l: 1.0
 lambda_r: ${lambda_l}
-lambda_internal: [1.0, 0.01]
+lambda_internal: 1.0
 lambda_fc: 1.0
-lambda_wback_skip:
-- 0.0
-lambda_wback: 2.0
+lambda_wback_skip: []
+lambda_wback: 0.5
 lambda_input_skip:
-- 2.0
-- 0.0
+- 5.0
 lambda_input_output_skip: 0.0
-lambda_wforth_skip:
-- 0.0
+lambda_wforth_skip: []
 lambda_wforth: 1.0
-fc_left: true
+fc_left: false
 fc_right: false
 fc_input: false
 zero_fc_init: true
@@ -39,18 +36,18 @@ symmetric_W: false
 symmetric_J_init: false
 double_dynamics: false
 double_update: false
-use_local_ce: true
-p_update: 0.8
-beta_ce: 2.5
+use_local_ce: false
+p_update: 1.0
+beta_ce: 10.0
 lambda_cylinder: null
+num_epochs: 40
 batch_size: 16
 threshold:
-- 1.0
-- 1.0
+- 1.4
 - 3.0
 lr_input_output_skip: 0.1
 lr_input_skip: 0.03
-lr_J: 0.01
+lr_J: 0.03
 lr_W: 0.1
 lr_wforth_skip: 0.1
 weight_decay_J: 0.005
@@ -65,9 +62,9 @@ skip_representations: false
 skip_couplings: false
 skip_fields: false
 data:
-  dataset: marc
-  P: 600
-  P_eval: 300
+  dataset: mnist
+  P: 6000
+  P_eval: 1000
   synthetic:
     C: 10
     p: 0.35
@@ -83,14 +80,5 @@ data:
     L: 1
     width: 300
     binarize: true
-
-num_epochs: 20
-num_epochs_warmup: 10
-num_epochs_couplings: 40
-num_epochs_full: 0
-num_epochs_tuning: 20
-begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third phase only
-p_curriculum_tuning: 0.5    # affects third phase only
-
 symmetric_threshold_internal_couplings: false
 symmetrize_internal_couplings: false
