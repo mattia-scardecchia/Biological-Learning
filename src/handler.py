@@ -1,11 +1,11 @@
 import logging
 import math
 from collections import defaultdict
-
+import os
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-
+import pickle
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
 
@@ -20,6 +20,7 @@ class Handler:
         output_dir: str,
         begin_curriculum: float = 1.0,
         p_curriculum: float = 0.5,
+        save_dir: str = "model",
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
@@ -31,6 +32,15 @@ class Handler:
 
         self.output_dir = output_dir
         self.memory_usage_file = f"{self.output_dir}/memory_usage.txt"
+
+    def save_model(self, epoch, save_dir=None):
+        if save_dir is None:
+            save_dir = self.output_dir + "/model"
+        os.makedirs(save_dir, exist_ok=True)
+        model_path = os.path.join(save_dir, f"model_epoch_{epoch}.pkl")
+        with open(model_path, "wb") as f:
+            pickle.dump(self.classifier, f)
+        logging.info(f"Model saved to {model_path}")
 
     def evaluate(
         self,
@@ -228,6 +238,7 @@ class Handler:
         if eval_interval is None:
             eval_interval = num_epochs + 1  # never evaluate
         self.flush_logs()
+        self.save_model(epoch=-1)
 
         for epoch in range(num_epochs):
             train_metrics = self.evaluate(inputs, targets, max_steps_eval)
@@ -246,6 +257,7 @@ class Handler:
             if (epoch + 1) % eval_interval == 0:
                 eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps_eval)
                 self.log(eval_metrics, type="eval")
+                self.save_model(epoch=epoch)
 
             out = self.train_epoch(
                 inputs[keep], targets[keep], max_steps_train, batch_size

@@ -7,7 +7,7 @@ name: prova
 seed: 17
 device: cuda
 'N': 100
-H: 300
+H: 1600
 num_layers: 1
 J_D: 0.5
 max_steps_train: 7
