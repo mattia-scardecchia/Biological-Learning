@@ -228,7 +228,7 @@ def parse_config(cfg):
 
 
 @hydra.main(
-    config_path="../configs", config_name="baseline_1layer_largeP", version_base="1.3"
+    config_path="../configs", config_name="baseline_1layer_smallP", version_base="1.3"
 )
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
@@ -283,6 +283,7 @@ def main(cfg):
         "symmetrize_fc": cfg.symmetrize_fc,
         "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
         "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
+        "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan

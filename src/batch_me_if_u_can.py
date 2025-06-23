@@ -152,6 +152,7 @@ class BatchMeIfUCan:
         weight_decay_input_output_skip: float,
         symmetrize_fc: bool,
         symmetric_threshold_internal_couplings: bool,
+        symmetric_update_internal_couplings: bool,
         symmetrize_internal_couplings: bool,
         zero_fc_init: bool,
         device: str = "cpu",
@@ -245,6 +246,7 @@ class BatchMeIfUCan:
         self.symmetric_threshold_internal_couplings = (
             symmetric_threshold_internal_couplings
         )
+        self.symmetric_update_internal_couplings = symmetric_update_internal_couplings
         self.symmetrize_internal_couplings = symmetrize_internal_couplings
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
@@ -913,6 +915,11 @@ class BatchMeIfUCan:
                 / 2,
                 0,
             )
+        elif self.symmetric_update_internal_couplings:
+            delta[:-1, :, self.H : 2 * self.H] = (
+                delta[:-1, :, self.H : 2 * self.H]
+                + delta[:-1, :, self.H : 2 * self.H].transpose(1, 2)
+            ) / 2
 
         self.couplings = self.couplings * (1 - self.weight_decay_tensor) + delta
 

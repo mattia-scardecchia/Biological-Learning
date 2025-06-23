@@ -117,6 +117,7 @@ def main(cfg):
         "symmetrize_fc": cfg.symmetrize_fc,
         "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
         "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
+        "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan
