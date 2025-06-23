@@ -58,7 +58,7 @@ def plot_representation_similarity(logs, save_dir, cfg, num_epochs):
 
 
 @hydra.main(
-    config_path="../configs", config_name="multi_step_train", version_base="1.3"
+    config_path="../configs", config_name="baseline_multi_layer", version_base="1.3"
 )
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
@@ -184,8 +184,9 @@ def main(cfg):
             cfg.num_epochs_warmup,
             train_inputs,
             train_targets,
-            cfg.max_steps,
-            cfg.batch_size,
+            cfg.max_steps_train,
+            max_steps_eval=cfg.max_steps_eval,
+            batch_size=cfg.batch_size,
             eval_interval=cfg.eval_interval,
             eval_inputs=eval_inputs,
             eval_targets=eval_targets,
@@ -260,7 +261,8 @@ def main(cfg):
             cfg.num_epochs_couplings,
             train_inputs,
             train_targets,
-            cfg.max_steps,
+            cfg.max_steps_train,
+            cfg.max_steps_eval,
             cfg.batch_size,
             eval_interval=cfg.eval_interval,
             eval_inputs=eval_inputs,
@@ -404,7 +406,8 @@ def main(cfg):
             cfg.num_epochs_tuning,
             train_inputs,
             train_targets,
-            cfg.max_steps,
+            cfg.max_steps_train,
+            cfg.max_steps_eval,
             cfg.batch_size,
             eval_interval=cfg.eval_interval,
             eval_inputs=eval_inputs,
@@ -447,7 +450,7 @@ def main(cfg):
 
     # Evaluate final model and plot Accuracy
     if cfg.num_epochs_tuning > 0:
-        eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps)
+        eval_metrics = handler.evaluate(eval_inputs, eval_targets, cfg.max_steps_eval)
         logging.info(f"Final Eval Accuracy: {eval_metrics['overall_accuracy']:.2f}")
         t2 = time.time()
         logging.info(f"Evaluation took {t2 - t1:.2f} seconds")

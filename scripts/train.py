@@ -162,6 +162,32 @@ def get_data(cfg):
             cfg.seed,
             cfg.data.hm.binarize,
         )
+    elif cfg.data.dataset == "marc":
+        C = 2
+        assert cfg.data.P <= 20000
+        P = cfg.data.P
+        logging.warning("Dirty data loading!!!")
+        data_dir = "/Users/mat/Desktop/Files/Code/Biological-Learning/data/marc-data"
+        inputs = np.load(
+            os.path.join(data_dir, f"xi_N100_P{200 if P == 200 else 20000}.npy")
+        )
+        targets = np.load(
+            os.path.join(data_dir, f"y_N100_P{200 if P == 200 else 20000}.npy")
+        )
+        perm = np.random.permutation(len(inputs))
+        inputs = inputs[perm]
+        targets = targets[perm]
+        train_inputs = torch.tensor(inputs[0 : int(0.9 * P)], dtype=torch.float32)
+        train_targets = torch.tensor(targets[0 : int(0.9 * P)], dtype=torch.float32)
+        eval_inputs = torch.tensor(inputs[int(0.9 * P) : P], dtype=torch.float32)
+        eval_targets = torch.tensor(targets[int(0.9 * P) : P], dtype=torch.float32)
+
+        train_order = train_targets.argmax(dim=1).argsort()
+        eval_order = eval_targets.argmax(dim=1).argsort()
+        train_inputs = train_inputs[train_order]
+        train_targets = train_targets[train_order]
+        eval_inputs = eval_inputs[eval_order]
+        eval_targets = eval_targets[eval_order]
     else:
         raise ValueError(f"Unsupported dataset: {cfg.data.dataset}")
     return train_inputs, train_targets, eval_inputs, eval_targets, C
@@ -195,6 +221,9 @@ def parse_config(cfg):
         lambda_right = (
             [cfg.lambda_r] * (cfg.num_layers - 1) + [cfg.lambda_wback] + [cfg.lambda_y]
         )
+    if lr[-2] != 0:
+        logging.warning("Detected lr of wback != 0. Setting it to 0")
+        lr[-2] = 0
     return lr, weight_decay, threshold, lambda_left, lambda_right
 
 
@@ -204,6 +233,7 @@ def main(cfg):
     lr, weight_decay, threshold, lambda_left, lambda_right = parse_config(cfg)
 
     train_inputs, train_targets, eval_inputs, eval_targets, C = get_data(cfg)
+
     train_inputs = train_inputs.to(cfg.device)
     train_targets = train_targets.to(cfg.device)
     eval_inputs = eval_inputs.to(cfg.device)
