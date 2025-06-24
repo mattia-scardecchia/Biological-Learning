@@ -290,7 +290,7 @@ class Handler:
             if (epoch + 1) % eval_interval == 0:
                 eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps_eval)
                 self.log(eval_metrics, type="eval")
-                if self.classifier.double_dynamics:
+                if self.classifier.double_dynamics and not self.skip_overlaps:
                     self.save_overlaps_double_dynamics(
                         inputs,
                         targets,
