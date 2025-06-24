@@ -1,0 +1,17 @@
+defaults:
+  - base
+  - _self_
+logging:
+  level: INFO
+
+name: compute_overlap
+P: 6000
+C: 10
+P_eval: 1000
+N: 100
+binarize: true
+seed: 17
+device: cpu
+model_path: "/Users/willinki/GIT/Biological-Learning/outputs/prova/long_epochs/model"
+epoch: 0
+steps: [1, 7, 14]
