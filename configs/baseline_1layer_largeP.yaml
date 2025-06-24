@@ -43,7 +43,7 @@ lambda_cylinder: null
 num_epochs: 40
 batch_size: 16
 threshold:
-- 1.4
+- 0.9
 - 3.0
 lr_input_output_skip: 0.1
 lr_input_skip: 0.03
