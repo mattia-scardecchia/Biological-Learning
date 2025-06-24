@@ -61,6 +61,7 @@ eval_interval: 1
 skip_representations: false
 skip_couplings: false
 skip_fields: false
+skip_overlaps: true
 data:
   dataset: marc
   P: 8500
