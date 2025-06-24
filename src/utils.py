@@ -491,7 +491,7 @@ def relaxation_trajectory_double_dynamics(
             # Store the state and unsat status
             states.append(state.clone())
             unsats.append(unsat.clone())
-    for step in range(dyn_steps):
+    for step in range(dyn_steps, dyn_steps * 2):
         state, _, unsat = classifier.relax(
             state_prev,
             max_steps=1,
