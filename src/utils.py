@@ -474,15 +474,28 @@ def relaxation_trajectory_double_dynamics(
     states = []
     unsats = []
     overlaps = []
-    max_steps = max(steps)
+    dyn_steps = max(steps) // 2
     if state is None:
         state = classifier.initialize_state(x, y, "zeros")
         state_prev = state.clone()
-    for step in range(max_steps):
+    for step in range(dyn_steps):
         state, _, unsat = classifier.relax(
             state_prev,
             max_steps=1,
             ignore_right=0,
+        )
+        overlap = (state_prev[:, 1] * state[:, 1]).sum(dim=-1) / state_prev.shape[-1]
+        overlaps.append(overlap)  # B
+        state_prev = state
+        if step + 1 in steps:
+            # Store the state and unsat status
+            states.append(state.clone())
+            unsats.append(unsat.clone())
+    for step in range(dyn_steps):
+        state, _, unsat = classifier.relax(
+            state_prev,
+            max_steps=1,
+            ignore_right=1,
         )
         overlap = (state_prev[:, 1] * state[:, 1]).sum(dim=-1) / state_prev.shape[-1]
         overlaps.append(overlap)  # B
