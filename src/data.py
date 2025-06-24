@@ -1,7 +1,7 @@
 import json
+import math
 import os
 from typing import Optional
-import math
 
 import numpy as np
 import torch
@@ -235,11 +235,16 @@ def prepare_vision_data(
     eval_labels = torch.eye(num_labels)[eval_labels]
 
     # Random linear projection and binarization
+    projection_matrix = None
     if project:
         projection_matrix = torch.randn(train_sample_size, N)
         train_images = train_images @ projection_matrix
         eval_images = eval_images @ projection_matrix
     if binarize:
+        # train_median = train_images.median(dim=0, keepdim=True).values
+        # eval_median = eval_images.median(dim=0, keepdim=True).values
+        # train_images = torch.sign(train_images - train_median)
+        # eval_images = torch.sign(eval_images - eval_median)
         train_images = torch.sign(train_images)
         eval_images = torch.sign(eval_images)
     else:

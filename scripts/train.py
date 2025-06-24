@@ -1,3 +1,4 @@
+import copy
 import cProfile
 import logging
 import os
@@ -131,14 +132,12 @@ def get_data(cfg):
             eval_inputs,
             eval_targets,
             projection_matrix,
-            median,
         ) = prepare_cifar(
             cfg.data.P * C,
             cfg.data.P_eval * C,
             cfg.N,
             cfg.data.cifar.binarize,
             cfg.seed,
-            cifar10=cfg.data.cifar.cifar10,
             shuffle=True,
         )
     elif cfg.data.dataset == "hm":
@@ -164,8 +163,9 @@ def get_data(cfg):
         )
     elif cfg.data.dataset == "marc":
         C = 2
-        assert cfg.data.P <= 20000
-        P = cfg.data.P
+        assert cfg.data.P + cfg.data.P_eval <= 20000 / C
+        P = cfg.data.P * C
+        P_eval = cfg.data.P_eval * C
         logging.warning("Dirty data loading!!!")
         data_dir = "/Users/mat/Desktop/Files/Code/Biological-Learning/data/marc-data"
         inputs = np.load(
@@ -174,13 +174,16 @@ def get_data(cfg):
         targets = np.load(
             os.path.join(data_dir, f"y_N100_P{200 if P == 200 else 20000}.npy")
         )
+        # rng = np.random.default_rng(cfg.seed)
+        # random_proj = rng.standard_normal((100, 100))
+        # inputs = np.sign(inputs @ random_proj)
         perm = np.random.permutation(len(inputs))
         inputs = inputs[perm]
         targets = targets[perm]
-        train_inputs = torch.tensor(inputs[0 : int(0.9 * P)], dtype=torch.float32)
-        train_targets = torch.tensor(targets[0 : int(0.9 * P)], dtype=torch.float32)
-        eval_inputs = torch.tensor(inputs[int(0.9 * P) : P], dtype=torch.float32)
-        eval_targets = torch.tensor(targets[int(0.9 * P) : P], dtype=torch.float32)
+        train_inputs = torch.tensor(inputs[0:P], dtype=torch.float32)
+        train_targets = torch.tensor(targets[0:P], dtype=torch.float32)
+        eval_inputs = torch.tensor(inputs[P : P + P_eval], dtype=torch.float32)
+        eval_targets = torch.tensor(targets[P : P + P_eval], dtype=torch.float32)
 
         train_order = train_targets.argmax(dim=1).argsort()
         eval_order = eval_targets.argmax(dim=1).argsort()
@@ -194,6 +197,23 @@ def get_data(cfg):
 
 
 def parse_config(cfg):
+    if "threshold" in cfg and "threshold_hidden" in cfg:
+        for i in range(cfg.num_layers):
+            assert cfg.threshold[i] == cfg.threshold_hidden
+    if "threshold" in cfg and "threshold_readout" in cfg:
+        assert cfg.threshold[-1] == cfg.threshold_readout
+    if "lr" in cfg and "lr_J" in cfg:
+        for i in range(cfg.num_layers):
+            assert cfg.lr[i] == cfg.lr_J
+    if "lr" in cfg and "lr_W" in cfg:
+        assert (
+            cfg.lr[-1] == cfg.lr_W
+        )  # NOTE: we do not check lr for wback, since it will be set to 0 later
+    if "weight_decay" in cfg and "weight_decay_J" in cfg:
+        for i in range(cfg.num_layers):
+            assert cfg.weight_decay[i] == cfg.weight_decay_J
+    if "weight_decay" in cfg and "weight_decay_W" in cfg:
+        assert cfg.weight_decay[-1] == cfg.weight_decay_W
     try:
         lr = cfg.lr
     except Exception:
@@ -203,12 +223,12 @@ def parse_config(cfg):
     except Exception:
         weight_decay = [cfg.weight_decay_J] * cfg.num_layers + [cfg.weight_decay_W] * 2
     try:
-        threshold = cfg.threshold
+        threshold = copy.deepcopy(cfg.threshold)
     except Exception:
         threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
-    J_D = [cfg.J_D] * cfg.num_layers if isinstance(cfg.J_D, float) else cfg.J_D
+    assert isinstance(cfg.J_D, (float, int))
     for i in range(cfg.num_layers):
-        threshold[i] = threshold[i] + J_D[i]
+        threshold[i] = threshold[i] + cfg.J_D
     try:
         lambda_left = cfg.lambda_left
     except Exception:
@@ -284,6 +304,7 @@ def main(cfg):
         "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
         "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
         "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
+        "bias_std": cfg.bias_std,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan
