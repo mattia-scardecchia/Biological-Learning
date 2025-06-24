@@ -22,12 +22,12 @@ def load_model(epoch: int, model_path: str):
     return model
 
 
-def compute_overlap_evolution(states, steps) -> Dict[str, torch.Tensor]:
+def compute_overlap_evolution(states, steps) -> Dict[str, np.ndarray]:
     # data, time, state
     overlaps_stats = {}
     for time1, time2 in combinations(range(len(steps)), 2):
-        state_1 = states[:, time1, :]
-        state_2 = states[:, time2, :]
+        state_1 = torch.tensor(states[:, time1, :])
+        state_2 = torch.tensor(states[:, time2, :])
         overlaps = torch.sum(state_1 * state_2, dim=-1) / state_1.shape[-1]
         overlaps_mean = overlaps.mean(dim=0).item()
         overlaps_error = overlaps.std(dim=0).item() / (overlaps.shape[0] ** 0.5)
@@ -42,7 +42,7 @@ def compute_overlap_evolution(states, steps) -> Dict[str, torch.Tensor]:
 
 
 def compute_convergence_evolution(statistics) -> Dict[str, torch.Tensor]:
-    average_overlap = statistics["overlaps"].mean(dim=-1)
+    average_overlap = torch.tensor(statistics["overlaps"]).mean(dim=-1)
     std_overlap = statistics["overlaps"].std(dim=-1)
     min_overlap = statistics["overlaps"].min(dim=-1).values
     return {
