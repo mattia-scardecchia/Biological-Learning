@@ -10,6 +10,11 @@ import argparse
 import json
 
 logger = logging.getLogger(__name__)
+logger.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
 
 
 def load_model(epoch: int, model_path: str):
@@ -28,6 +33,7 @@ def compute_overlap_evolution(states, steps) -> Dict[str, np.ndarray]:
     for time1, time2 in combinations(range(len(steps)), 2):
         state_1 = torch.tensor(states[:, time1, :])
         state_2 = torch.tensor(states[:, time2, :])
+        print(state_1.shape, state_2.shape)
         overlaps = torch.sum(state_1 * state_2, dim=-1) / state_1.shape[-1]
         overlaps_mean = overlaps.mean(dim=0).tolist()
         overlaps_error = (overlaps.std(dim=0) / (overlaps.shape[0] ** 0.5)).tolist()
