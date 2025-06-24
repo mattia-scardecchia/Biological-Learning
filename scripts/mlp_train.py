@@ -51,6 +51,8 @@ def main(cfg: DictConfig):
         scheduler=cfg.scheduler.name if cfg.scheduler.enabled else None,
         scheduler_params=cfg.scheduler.params if cfg.scheduler.enabled else None,
         random_features=cfg.random_features,
+        beta=cfg.model.beta,
+        binarize=cfg.model.binarize,
     )
 
     # Get callbacks
