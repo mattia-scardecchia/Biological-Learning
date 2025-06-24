@@ -43,7 +43,7 @@ class Handler:
         os.makedirs(save_dir, exist_ok=True)
         logging.info(f"Saving overlaps for epoch {epoch} to {save_dir}")
         steps = [1, max_steps, max_steps * 2]
-        states, unsats = relaxation_trajectory_double_dynamics(
+        states, unsats, overlaps = relaxation_trajectory_double_dynamics(
             self.classifier,
             train_x,
             train_y,
@@ -54,13 +54,14 @@ class Handler:
             "epoch": epoch,
             "states": states.cpu().numpy(),
             "unsats": unsats.cpu().numpy(),
+            "overlaps": overlaps.cpu().numpy(),
             "y": train_y.cpu().numpy(),
         }
         with open(
             os.path.join(save_dir, f"overlaps_train_epoch{epoch}.pkl"), "wb"
         ) as f:
             pickle.dump(states_info, f)
-        states, unsats = relaxation_trajectory_double_dynamics(
+        states, unsats, overlaps = relaxation_trajectory_double_dynamics(
             self.classifier,
             eval_x,
             eval_y,
@@ -71,6 +72,7 @@ class Handler:
             "epoch": epoch,
             "states": states.cpu().numpy(),
             "unsats": unsats.cpu().numpy(),
+            "overlaps": overlaps.cpu().numpy(),
             "y": eval_y.cpu().numpy(),
         }
         with open(os.path.join(save_dir, f"overlaps_eval_epoch{epoch}.pkl"), "wb") as f:

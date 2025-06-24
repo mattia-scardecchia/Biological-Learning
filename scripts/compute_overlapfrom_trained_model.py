@@ -6,10 +6,8 @@ import os
 import logging
 from itertools import combinations
 from typing import Dict
-from omegaconf import DictConfig
-import hydra
-from src.data import prepare_mnist
-from tabulate import tabulate
+import argparse
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -24,29 +22,6 @@ def load_model(epoch: int, model_path: str):
     return model
 
 
-def relaxation_trajectory(classifier, x, y, steps, state=None):
-    states = []
-    unsats = []
-    max_steps = max(steps)
-    if state is None:
-        state = classifier.initialize_state(x, y, "zeros")
-    for step in range(max_steps):
-        state, _, unsat = classifier.relax(
-            state,
-            max_steps=1,
-            ignore_right=0,
-        )
-        if step + 1 in steps:
-            # Store the state and unsat status
-            states.append(state.clone())
-            unsats.append(unsat.clone())
-    states = torch.stack(states, dim=0)  # T, B, L, N
-    states = states.permute(1, 0, 2, 3)  # B, T, L, N
-    unsats = torch.stack(unsats, dim=0)  # T, B, L, N
-    unsats = unsats.permute(1, 0, 2, 3)  # B, T, L, N
-    return states, unsats
-
-
 def compute_overlap_evolution(states, steps) -> Dict[str, torch.Tensor]:
     # data, time, state
     overlaps_stats = {}
@@ -54,83 +29,73 @@ def compute_overlap_evolution(states, steps) -> Dict[str, torch.Tensor]:
         state_1 = states[:, time1, :]
         state_2 = states[:, time2, :]
         overlaps = (state_1 * state_2).sum(dim=-1) / state_1.shape[-1]
-        overlaps_stats[f"{steps[time1]}-{steps[time2]}"] = overlaps
+        overlaps_mean = overlaps.mean(dim=0).item()
+        overlaps_error = overlaps.std(dim=0).item() / (overlaps.shape[0] ** 0.5)
+        overlaps_std = overlaps.std(dim=0).item()
+        overlaps_stats[f"{steps[time1]}-{steps[time2]}"] = {
+            "mean": overlaps_mean,
+            "error": overlaps_error,
+            "std": overlaps_std,
+        }
     logger.info(f"Computed overlaps for {list(overlaps_stats.keys())}")
     return overlaps_stats
 
 
-def plot_overlap_from_key(overlaps_stats, key):
-    xy = [
-        (float(k.split("-")[1]), overlaps_stats[k])
-        for k in overlaps_stats.keys()
-        if k.startswith(key)
-    ]
-    print(len(xy), "overlaps found for key", key)
-    x = [item[0] for item in xy]
-    y = [item[1].mean().item() for item in xy]
-    y_err = [item[1].std().item() for item in xy]
-    return x, y, y_err
+def compute_convergence_evolution(statistics) -> Dict[str, torch.Tensor]:
+    average_overlap = statistics["overlaps"].mean(dim=-1)
+    std_overlap = statistics["overlaps"].std(dim=-1)
+    min_overlap = statistics["overlaps"].min(dim=-1).values
+    return {
+        "average_overlap": average_overlap,
+        "std_overlap": std_overlap,
+        "min_overlap": min_overlap,
+    }
 
 
-def table_overlap_evolution(overlaps_stats, keys):
-    rows = []
-    for key in keys:
-        x, y, y_err = plot_overlap_from_key(overlaps_stats, key)
-        for xi, yi, yerri in zip(x, y, y_err):
-            rows.append({"key": key, "y": yi, "y_err": yerri})
-    print(tabulate(rows, headers="keys", tablefmt="github"))
+def compute_statistics(statistics):
+    overlap_stats = compute_overlap_evolution(statistics["states"], statistics["steps"])
+    convergence_stats = compute_convergence_evolution(statistics)
+    return {
+        "overlaps": overlap_stats,
+        "convergence": convergence_stats,
+        "steps": statistics["steps"],
+        "epoch": statistics["epoch"],
+    }
 
 
-@hydra.main(config_path="../configs", config_name="compute_overlap")
-def main(cfg: DictConfig):
-    P = cfg["P"]
-    C = cfg["C"]
-    P_eval = cfg["P_eval"]
-    N = cfg["N"]
-    binarize = cfg["binarize"]
-    seed = cfg["seed"]
-    device = cfg["device"]
-    model_path = cfg["model_path"]
-    models = os.listdir(model_path)
-    logger.info(f"Found models: {models}")
-    train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
-        prepare_mnist(
-            P * C,
-            P_eval * C,
-            N,
-            binarize,
-            seed,
-            shuffle=True,
-        )
+def main(**args):
+    experiment_path = args["model_path"]
+    files = os.listdir(experiment_path)
+    train_files = [f for f in files if "train" in f and f.endswith(".pkl")]
+    eval_files = [f for f in files if "eval" in f and f.endswith(".pkl")]
+    train_stats, eval_stats = [], []
+    for train_file in train_files:
+        logger.info(f"Processing training file: {train_file}")
+        with open(os.path.join(experiment_path, train_file), "rb") as f:
+            statistics = pickle.load(f)
+        statistics = compute_statistics(statistics)
+        train_stats.append(statistics)
+    for eval_file in eval_files:
+        logger.info(f"Processing training file: {eval_file}")
+        with open(os.path.join(experiment_path, eval_file), "rb") as f:
+            statistics = pickle.load(f)
+        statistics = compute_statistics(statistics)
+        eval_stats.append(statistics)
+    logger.info(
+        f"Computed statistics for {len(train_stats)} training and {len(eval_stats)} evaluation files."
     )
-    train_inputs = train_inputs.to(device)
-    train_targets = train_targets.to(device)
-    eval_inputs = eval_inputs.to(device)
-    eval_targets = eval_targets.to(device)
-    classifier = load_model(cfg["epoch"], model_path=cfg["model_path"])
-    # computing overlaps
-    states, unsats = relaxation_trajectory(
-        classifier,
-        train_inputs,
-        train_targets,
-        steps=cfg["steps"],
-    )
-    states = states[:, :, 1, :]
-    overlap_stats = compute_overlap_evolution(states, cfg["steps"])
-    logger.info("Computed train overlaps")
-    table_overlap_evolution(overlap_stats, list(overlap_stats.keys()))
-    # computing eval overlaps
-    states, unsats = relaxation_trajectory(
-        classifier,
-        eval_inputs,
-        eval_targets,
-        steps=cfg["steps"],
-    )
-    states = states[:, :, 1, :]
-    overlap_stats = compute_overlap_evolution(states, cfg["steps"])
-    logger.info("Computed eval overlaps")
-    table_overlap_evolution(overlap_stats, list(overlap_stats.keys()))
+    with open(os.path.join(experiment_path, "train_statistics.json"), "w") as f:
+        json.dump(train_stats, f, indent=2)
+    with open(os.path.join(experiment_path, "eval_statistics.json"), "w") as f:
+        json.dump(eval_stats, f, indent=2)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Compute overlap statistics from trained model."
+    )
+    parser.add_argument(
+        "--model_path", type=str, required=True, help="Path to the model directory."
+    )
+    args = parser.parse_args()
+    main(model_path=args.model_path)
