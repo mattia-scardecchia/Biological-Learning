@@ -13,3 +13,4 @@ literature/
 
 *.stats
 .venv/
+docs/*
