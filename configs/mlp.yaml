@@ -7,13 +7,15 @@ name: mlp
 experiment_name: mlp_classifier
 seed: 17
 N: 100  # data dimension
-random_features: true  # if true, freeze all layers except the last
+random_features: false  # if true, freeze all layers except the last
 mup: false
 
 # Model parameters
 model:
-  hidden_dims: [800]  # Hidden layer dimensions
+  hidden_dims: [300]  # Hidden layer dimensions
   dropout_rate: 0.0       # Dropout probability
+  beta: 1.0 # tanh temperature
+  binarize: false  # If true, binarize hidden activations and use straight-through estimator for gradients
 
 # Dataloader parameters
 dataloader:
