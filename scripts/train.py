@@ -296,6 +296,7 @@ def main(cfg):
         output_dir,
         cfg.begin_curriculum,
         cfg.p_curriculum,
+        skip_overlaps=cfg.skip_overlaps,
     )
 
     fields_plots_dir = os.path.join(output_dir, "fields")

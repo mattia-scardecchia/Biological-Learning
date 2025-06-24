@@ -21,11 +21,13 @@ class Handler:
         output_dir: str,
         begin_curriculum: float = 1.0,
         p_curriculum: float = 0.5,
+        skip_overlaps: bool = True,
         save_dir: str = "model",
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
         self.skip_couplings = skip_couplings
+        self.skip_overlaps = skip_overlaps
         self.init_mode = init_mode
         self.begin_curriculum = begin_curriculum
         self.p_curriculum = p_curriculum
