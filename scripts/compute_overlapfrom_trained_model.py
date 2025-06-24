@@ -9,12 +9,12 @@ from typing import Dict
 import argparse
 import json
 
-logger = logging.getLogger(__name__)
-logger.basicConfig(
+logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     level=logging.INFO,
 )
+logger = logging.getLogger(__name__)
 
 
 def load_model(epoch: int, model_path: str):
