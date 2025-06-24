@@ -96,6 +96,8 @@ def main(cfg):
             lr[i] = hyperparams["lr_J"]
             weight_decay[i] = hyperparams["weight_decay_J"]
         threshold[-1] = hyperparams["threshold_readout"]
+        for i in range(cfg.num_layers):
+            threshold[i] = threshold[i] + J_D
 
         # ================== Model Training ==================
 
@@ -153,6 +155,7 @@ def main(cfg):
             "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
             "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
             "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
+            "bias_std": cfg.bias_std,
             "H": H,
         }
         model_cls = BatchMeIfUCan
