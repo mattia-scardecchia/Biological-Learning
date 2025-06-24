@@ -1,13 +1,14 @@
 import logging
 import math
 from collections import defaultdict
-
+import os
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-
+import pickle
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
+from src.utils import relaxation_trajectory_double_dynamics
 
 
 class Handler:
@@ -20,6 +21,7 @@ class Handler:
         output_dir: str,
         begin_curriculum: float = 1.0,
         p_curriculum: float = 0.5,
+        save_dir: str = "model",
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
@@ -31,6 +33,46 @@ class Handler:
 
         self.output_dir = output_dir
         self.memory_usage_file = f"{self.output_dir}/memory_usage.txt"
+
+    def save_overlaps_double_dynamics(
+        self, train_x, train_y, eval_x, eval_y, max_steps, epoch
+    ):
+        save_dir = self.output_dir + "/overlaps"
+        os.makedirs(save_dir, exist_ok=True)
+        logging.info(f"Saving overlaps for epoch {epoch} to {save_dir}")
+        steps = [1, max_steps, max_steps * 2]
+        states, unsats = relaxation_trajectory_double_dynamics(
+            self.classifier,
+            train_x,
+            train_y,
+            steps=steps,
+        )
+        states_info = {
+            "steps": steps,
+            "epoch": epoch,
+            "states": states.cpu().numpy(),
+            "unsats": unsats.cpu().numpy(),
+            "y": train_y.cpu().numpy(),
+        }
+        with open(
+            os.path.join(save_dir, f"overlaps_train_epoch{epoch}.pkl"), "wb"
+        ) as f:
+            pickle.dump(states_info, f)
+        states, unsats = relaxation_trajectory_double_dynamics(
+            self.classifier,
+            eval_x,
+            eval_y,
+            steps=steps,
+        )
+        states_info = {
+            "steps": steps,
+            "epoch": epoch,
+            "states": states.cpu().numpy(),
+            "unsats": unsats.cpu().numpy(),
+            "y": eval_y.cpu().numpy(),
+        }
+        with open(os.path.join(save_dir, f"overlaps_eval_epoch{epoch}.pkl"), "wb") as f:
+            pickle.dump(states_info, f)
 
     def evaluate(
         self,
@@ -246,6 +288,15 @@ class Handler:
             if (epoch + 1) % eval_interval == 0:
                 eval_metrics = self.evaluate(eval_inputs, eval_targets, max_steps_eval)
                 self.log(eval_metrics, type="eval")
+                if self.classifier.double_dynamics:
+                    self.save_overlaps_double_dynamics(
+                        inputs,
+                        targets,
+                        eval_inputs,
+                        eval_targets,
+                        max_steps_train,
+                        epoch,
+                    )
 
             out = self.train_epoch(
                 inputs[keep], targets[keep], max_steps_train, batch_size
