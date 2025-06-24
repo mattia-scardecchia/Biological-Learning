@@ -463,3 +463,31 @@ def plot_couplings_distro_evolution(logs):
     figs["right"] = fig_right
 
     return figs
+
+
+def relaxation_trajectory_double_dynamics(
+    classifier, x: torch.Tensor, y: torch.Tensor, steps: List[int], state=None
+):
+    """
+    saves the state and unsat percentage at each step in step list
+    """
+    states = []
+    unsats = []
+    max_steps = max(steps)
+    if state is None:
+        state = classifier.initialize_state(x, y, "zeros")
+    for step in range(max_steps):
+        state, _, unsat = classifier.relax(
+            state,
+            max_steps=1,
+            ignore_right=0,
+        )
+        if step + 1 in steps:
+            # Store the state and unsat status
+            states.append(state.clone())
+            unsats.append(unsat.clone())
+    states = torch.stack(states, dim=0)  # T, B, L, N
+    states = states.permute(1, 0, 2, 3)  # B, T, L, N
+    unsats = torch.stack(unsats, dim=0)  # T, B, L, N
+    unsats = unsats.permute(1, 0, 2, 3)  # B, T, L, N
+    return states, unsats
