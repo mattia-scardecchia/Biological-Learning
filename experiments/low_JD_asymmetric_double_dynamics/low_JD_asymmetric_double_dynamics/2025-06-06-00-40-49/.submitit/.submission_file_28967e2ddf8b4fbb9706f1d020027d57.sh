@@ -1,0 +1,1 @@
+/home/Badalotti/Biological-Learning/multirun/low_JD_asymmetric_double_dynamics/2025-06-06-00-40-49/.submitit/288041/288041_submission.sh
