@@ -37,9 +37,9 @@ def compute_overlap_evolution(states, steps) -> Dict[str, np.ndarray]:
         state_1 = torch.tensor(states[:, time1, :])
         state_2 = torch.tensor(states[:, time2, :])
         overlaps = torch.sum(state_1 * state_2, dim=-1) / state_1.shape[-1]
-        overlaps_mean = overlaps.mean(dim=0).tolist()
-        overlaps_error = (overlaps.std(dim=0) / (overlaps.shape[0] ** 0.5)).tolist()
-        overlaps_std = overlaps.std(dim=0).tolist()
+        overlaps_mean = overlaps.mean(dim=0).item()
+        overlaps_error = (overlaps.std(dim=0) / (overlaps.shape[0] ** 0.5)).item()
+        overlaps_std = overlaps.std(dim=0).item()
         overlaps_stats[f"{steps[time1]}-{steps[time2]}"] = {
             "mean": overlaps_mean,
             "error": overlaps_error,
