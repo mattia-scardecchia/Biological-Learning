@@ -30,8 +30,10 @@ def load_model(epoch: int, model_path: str):
 def compute_overlap_evolution(states, steps) -> Dict[str, np.ndarray]:
     # data, time, state
     overlaps_stats = {}
+    if states.ndim == 4:
+        assert states.shape[-2] == 4, "Only single layer is supported"
+        states = states[:, :, 1, :]
     for time1, time2 in combinations(range(len(steps)), 2):
-        print(states.shape)
         state_1 = torch.tensor(states[:, time1, :])
         state_2 = torch.tensor(states[:, time2, :])
         overlaps = torch.sum(state_1 * state_2, dim=-1) / state_1.shape[-1]
