@@ -34,8 +34,13 @@ def compute_overlap_evolution(states, steps) -> Dict[str, np.ndarray]:
         assert states.shape[-2] == 4, "Only single layer is supported"
         states = states[:, :, 1, :]
     for time1, time2 in combinations(range(len(steps)), 2):
+<<<<<<< HEAD
         state_1 = torch.tensor(states[:, time1, :])
         state_2 = torch.tensor(states[:, time2, :])
+=======
+        state_1 = states[:, time1, :]
+        state_2 = states[:, time2, :]
+>>>>>>> e28eb7e (interactive debug)
         overlaps = torch.sum(state_1 * state_2, dim=-1) / state_1.shape[-1]
         overlaps_mean = overlaps.mean(dim=0).item()
         overlaps_error = (overlaps.std(dim=0) / (overlaps.shape[0] ** 0.5)).item()
