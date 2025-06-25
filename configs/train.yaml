@@ -77,3 +77,10 @@ eval_interval: 1  # epochs
 skip_representations: false
 skip_couplings: false
 skip_fields: false
+skip_overlaps: true
+
+symmetric_threshold_internal_couplings: false
+symmetrize_internal_couplings: false
+symmetric_update_internal_couplings: false # symmetric_threshold_internal_couplings takes precedence over this
+
+bias_std: 0.0

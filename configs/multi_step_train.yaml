@@ -15,7 +15,8 @@ N: 100
 H: 300
 num_layers: 3
 J_D: 0.5
-max_steps: 7                                   # full sweeps over the network (relaxation)
+max_steps_train: 7                             # full sweeps over the network (relaxation)
+max_steps_eval: ${max_steps_train}
 init_mode: "zeros"                             # "input", "zeros"
 init_noise: 0.0
 
@@ -44,24 +45,24 @@ symmetric_J_init: false
 
 double_dynamics: false
 double_update: false
-use_local_ce: true
+use_local_ce: false
 p_update: 0.8
 beta_ce: 2.5
 lambda_cylinder: null
 
 # Perceptron Rule
 batch_size: 16
-lr: [0.03, 0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
-threshold: [1.0, 1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
+# lr: [0.03, 0.03, 0.03, 0.0, 0.1]                        # scaled by typical weight size. last two are for W_back and W_forth
+# threshold: [1.0, 1.0, 1.0, 3.0]                       # perceptron rule. last is for readout layer
 # weight_decay: [0.005, 0.005, 0.0, 0.005]              # scaled by learning rate. last two are for W_back and W_forth
 lr_input_output_skip: 0.1
 lr_input_skip: 0.03
-# lr_J: 0.03
-# lr_W: 0.1
+lr_J: 0.03
+lr_W: 0.1
 lr_wforth_skip: 0.1
 
-# threshold_hidden: -10.0
-# threshold_readout: 7.5
+threshold_hidden: 0.5
+threshold_readout: 3.0
 weight_decay_J: 0.005
 weight_decay_W: 0.005
 weight_decay_wforth_skip: 0.005
@@ -84,3 +85,6 @@ eval_interval: 1  # epochs
 skip_representations: false
 skip_couplings: false
 skip_fields: false
+skip_overlaps: true
+
+bias_std: 0.0

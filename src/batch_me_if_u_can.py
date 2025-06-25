@@ -155,6 +155,7 @@ class BatchMeIfUCan:
         symmetric_update_internal_couplings: bool,
         symmetrize_internal_couplings: bool,
         zero_fc_init: bool,
+        bias_std: float,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -248,6 +249,7 @@ class BatchMeIfUCan:
         )
         self.symmetric_update_internal_couplings = symmetric_update_internal_couplings
         self.symmetrize_internal_couplings = symmetrize_internal_couplings
+        self.bias_std = bias_std
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_N = torch.sqrt(torch.tensor(N, device=device))
@@ -305,8 +307,32 @@ class BatchMeIfUCan:
             f"use_local_ce={use_local_ce},\n"
             f"beta_ce={beta_ce},\n"
             f"p_update={p_update},\n"
+            f"lambda_cylinder={lambda_cylinder},\n"
+            f"lambda_wback_skip={lambda_wback_skip},\n"
+            f"lambda_wforth_skip={lambda_wforth_skip},\n"
+            f"lr_wforth_skip={lr_wforth_skip},\n"
+            f"weight_decay_wforth_skip={weight_decay_wforth_skip},\n"
+            f"lambda_input_skip={lambda_input_skip},\n"
+            f"lambda_input_output_skip={lambda_input_output_skip},\n"
+            f"lr_input_skip={lr_input_skip},\n"
+            f"weight_decay_input_skip={weight_decay_input_skip},\n"
+            f"lr_input_output_skip={lr_input_output_skip},\n"
+            f"weight_decay_input_output_skip={weight_decay_input_output_skip},\n"
+            f"symmetrize_fc={symmetrize_fc},\n"
+            f"symmetric_threshold_internal_couplings={symmetric_threshold_internal_couplings},\n"
+            f"symmetric_update_internal_couplings={symmetric_update_internal_couplings},\n"
+            f"symmetrize_internal_couplings={symmetrize_internal_couplings},\n"
+            f"zero_fc_init={zero_fc_init},\n"
+            f"bias_std={bias_std},\n"
             f"device={device},\n"
             f"seed={seed},\n"
+        )
+
+        self.bias = (
+            torch.randn(
+                (1, self.L, self.H), device=self.device, generator=self.generator
+            )
+            * self.bias_std
         )
 
     def prepare_tensors(
@@ -703,12 +729,20 @@ class BatchMeIfUCan:
             # y_hat = y.clone()
         elif mode == "noisy_zeros":
             signs = (
-                torch.randint(0, 2, (batch_size, L, H), device=self.device, dtype=DTYPE)
+                torch.randint(
+                    0,
+                    2,
+                    (batch_size, L, H),
+                    device=self.device,
+                    dtype=DTYPE,
+                    generator=self.generator,
+                )
                 * 2
                 - 1
             )
             neurons = torch.where(
-                torch.rand(H, device=self.device, dtype=DTYPE) < self.init_noise,
+                torch.rand(H, device=self.device, dtype=DTYPE, generator=self.generator)
+                < self.init_noise,
                 signs,
                 torch.zeros_like(signs, device=self.device, dtype=DTYPE),
             )
@@ -818,6 +852,7 @@ class BatchMeIfUCan:
         #     state[:, -2, : self.C] / (self.root_C / 2),
         # )
         # self.last_fields = fields.clone()
+        fields[:, :-1, :] += self.bias
         return fields
 
     def symmetrize_couplings(self):
@@ -911,8 +946,8 @@ class BatchMeIfUCan:
 
         if self.symmetric_threshold_internal_couplings:
             delta[:-1, :, self.H : 2 * self.H] = torch.where(
-                (delta[:-1, :, self.H : 2 * self.H] > 0)
-                & (delta[:-1, :, self.H : 2 * self.H].transpose(1, 2) > 0),
+                (delta[:-1, :, self.H : 2 * self.H] != 0)
+                & (delta[:-1, :, self.H : 2 * self.H].transpose(1, 2) != 0),
                 (
                     delta[:-1, :, self.H : 2 * self.H]
                     + delta[:-1, :, self.H : 2 * self.H].transpose(1, 2)
@@ -984,7 +1019,9 @@ class BatchMeIfUCan:
         while sweeps < max_steps:
             ir = ignore_right if sweeps >= self.L else 1
             fields = self.local_field(state, ignore_right=ir)
-            update_mask = torch.rand_like(fields) < self.p_update
+            update_mask = (
+                torch.rand_like(fields) < self.p_update
+            )  # TODO: this does not support generator...
             state[:, 1:-1, :] = torch.where(
                 update_mask,
                 torch.sign(fields),
@@ -1007,7 +1044,9 @@ class BatchMeIfUCan:
         while sweeps < max_sweeps:
             ir = 0 if sweeps >= self.L else 1
             fields = self.local_field(state, ignore_right=ir)
-            update_mask = torch.rand_like(fields) < self.p_update
+            update_mask = (
+                torch.rand_like(fields) < self.p_update
+            )  # TODO: this does not support generator...
             state[:, 1:-1, :] = torch.where(
                 update_mask,
                 torch.sign(fields),
@@ -1020,7 +1059,9 @@ class BatchMeIfUCan:
         first_fixed_point = state.clone()
         while sweeps < 2 * max_sweeps:
             fields = self.local_field(state, ignore_right=3)
-            update_mask = torch.rand_like(fields) < self.p_update
+            update_mask = (
+                torch.rand_like(fields) < self.p_update
+            )  # TODO: this does not support generator...
             state[:, 1:-1, :] = torch.where(
                 update_mask,
                 torch.sign(fields),

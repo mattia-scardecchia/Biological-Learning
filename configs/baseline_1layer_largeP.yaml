@@ -84,3 +84,5 @@ data:
 symmetric_threshold_internal_couplings: false
 symmetrize_internal_couplings: false
 symmetric_update_internal_couplings: false
+
+bias_std: 0.0

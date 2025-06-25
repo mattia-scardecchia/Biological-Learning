@@ -85,8 +85,28 @@ class Sign(nn.Module):
         return torch.sign(x)
 
 
+class BetaTanh(nn.Module):
+    def __init__(self, beta=1.0, binarize=False):
+        super().__init__()
+        self.beta = beta
+        self.binarize = binarize
+
+    def forward(self, x):
+        out = torch.tanh(self.beta * x)
+        if not self.binarize:
+            return out
+        return out + (torch.sign(out) - out).detach()
+
+
 def instantiate_mlp_classifier(
-    hidden_dims, random_features, dropout_rate, input_dim, num_classes, mup
+    hidden_dims,
+    random_features,
+    dropout_rate,
+    input_dim,
+    num_classes,
+    mup,
+    beta,
+    binarize,
 ):
     layers = []
     prev_dim = input_dim
@@ -99,9 +119,12 @@ def instantiate_mlp_classifier(
         layers.append(linear)
         if random_features:
             assert len(hidden_dims) == 1
+            logging.warning(
+                "With random features, we set activation to Sign and dropout to 0."
+            )
             layers.append(Sign())
         else:
-            layers.append(nn.ReLU())
+            layers.append(BetaTanh(beta=beta, binarize=binarize))
             layers.append(nn.Dropout(dropout_rate))
         prev_dim = hidden_dim
 
@@ -128,6 +151,8 @@ class MLPClassifier(BaseClassifier):
         optimizer: str = "adam",
         scheduler: Optional[str] = None,
         scheduler_params: Optional[Dict[str, Any]] = None,
+        beta: float = 1.0,
+        binarize: bool = False,
         random_features: Optional[bool] = False,
     ):
         """
@@ -154,6 +179,8 @@ class MLPClassifier(BaseClassifier):
             input_dim,
             num_classes,
             mup=False,
+            beta=beta,
+            binarize=binarize,
         )
 
     def forward(self, x):
@@ -239,6 +266,8 @@ class MuPClassifier(BaseClassifier):
         optimizer: str = "adamw",
         scheduler: Optional[str] = None,
         scheduler_params: Optional[Dict[str, Any]] = None,
+        beta: float = 1.0,
+        binarize: bool = False,
         random_features: Optional[bool] = False,
     ):
         super().__init__(num_classes)
@@ -253,6 +282,8 @@ class MuPClassifier(BaseClassifier):
             input_dim,
             num_classes,
             mup=True,
+            beta=beta,
+            binarize=binarize,
         )
         delta_hidden_dims = [1600] * len(hidden_dims)
         delta_model = instantiate_mlp_classifier(
@@ -262,6 +293,8 @@ class MuPClassifier(BaseClassifier):
             input_dim,
             num_classes,
             mup=True,
+            beta=beta,
+            binarize=binarize,
         )
         model = instantiate_mlp_classifier(
             hidden_dims,
@@ -270,6 +303,8 @@ class MuPClassifier(BaseClassifier):
             input_dim,
             num_classes,
             mup=True,
+            beta=beta,
+            binarize=binarize,
         )
         set_base_shapes(model, base_model, delta=delta_model)
         # for p in model.parameters():
