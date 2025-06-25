@@ -52,12 +52,12 @@ def compute_overlap_evolution(states, steps) -> Dict[str, np.ndarray]:
 def compute_convergence_evolution(statistics) -> Dict[str, torch.Tensor]:
     statistics["overlaps"] = torch.tensor(statistics["overlaps"])
     try:
-        average_overlap = statistics["overlaps"].mean(dim=-1)
+        average_overlap = statistics["overlaps"].mean(dim=-1).tolist()
     except KeyError:
         logger.error("Key 'overlaps' not found in statistics.")
         return {}
-    std_overlap = statistics["overlaps"].std(dim=-1)
-    min_overlap = statistics["overlaps"].min(dim=-1).values
+    std_overlap = statistics["overlaps"].std(dim=-1).tolist()
+    min_overlap = statistics["overlaps"].min(dim=-1).values.tolist()
     return {
         "average_overlap": average_overlap,
         "std_overlap": std_overlap,
