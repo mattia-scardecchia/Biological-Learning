@@ -50,7 +50,6 @@ def main(cfg):
             "lambda_input_skip_values", [cfg.lambda_input_skip]
         ),
         "max_steps_train": cfg.get("max_steps_train_values", [cfg.max_steps_train]),
-        "max_steps_eval": cfg.get("max_steps_eval_values", [cfg.max_steps_eval]),
         "threshold_hidden": cfg.get("threshold_hidden_values", [cfg.threshold[0]]),
         "threshold_readout": cfg.get("threshold_readout_values", [cfg.threshold[-1]]),
         "lr_J": cfg.get("lr_J_values", [cfg.lr_J]),
@@ -84,7 +83,10 @@ def main(cfg):
         J_D = hyperparams["J_D"]
         lambda_input_skip = hyperparams["lambda_input_skip"]
         max_steps_train = hyperparams["max_steps_train"]
-        max_steps_eval = hyperparams["max_steps_eval"]
+        #
+        # HOTFIX: Use the same max_steps_eval as in the original script
+        #
+        max_steps_eval = hyperparams["max_steps_train"]
         H = hyperparams["H"]
         beta_ce = hyperparams["beta_ce"]
         double_dynamics = hyperparams["double_dynamics"]
@@ -277,5 +279,5 @@ def main(cfg):
     logging.info(f"Hyperparameter tuning completed. Results saved in {results_file}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  #
     main()
