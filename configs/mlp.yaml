@@ -15,7 +15,9 @@ model:
   hidden_dims: [300]  # Hidden layer dimensions
   dropout_rate: 0.0       # Dropout probability
   beta: 1.0 # tanh temperature
-  binarize: false  # If true, binarize hidden activations and use straight-through estimator for gradients
+  binarize: true  # If true, binarize hidden activations and use straight-through estimator for gradients
+  activation: "beta_tanh"  # Options: beta_tanh, square_tanh
+  use_bias: false
 
 # Dataloader parameters
 dataloader:
@@ -25,7 +27,7 @@ dataloader:
 optimizer:
   name: "adamw"  # Options: adam, adamw, sgd
   learning_rate: 0.001
-  weight_decay: 0.01
+  weight_decay: 0.02
 
 # Learning rate scheduler
 scheduler:
@@ -37,7 +39,7 @@ scheduler:
     
 # Training parameters
 trainer:
-  max_epochs: 50
+  max_epochs: 20
   accelerator: "auto"  # Options: cpu, gpu, auto
   devices: 1
   precision: 32  # Options: 32, 16, "bf16"

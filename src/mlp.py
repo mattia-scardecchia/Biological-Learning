@@ -98,6 +98,28 @@ class BetaTanh(nn.Module):
         return out + (torch.sign(out) - out).detach()
 
 
+class DifferentiableSign(nn.Module):
+    def __init__(self, beta=1.0):
+        super().__init__()
+        self.beta = beta
+
+    def forward(self, x):
+        return (torch.sign(x) - x).detach() + x
+
+
+class SquareTanh(nn.Module):
+    def __init__(self, beta=1.0, binarize=False):
+        super().__init__()
+        self.beta = beta
+        self.binarize = binarize
+
+    def forward(self, x):
+        out = torch.clamp(self.beta * x, -1.0, 1.0)
+        if not self.binarize:
+            return out
+        return out + (torch.sign(out) - out).detach()
+
+
 def instantiate_mlp_classifier(
     hidden_dims,
     random_features,
@@ -107,12 +129,14 @@ def instantiate_mlp_classifier(
     mup,
     beta,
     binarize,
+    activation,
+    use_bias,
 ):
     layers = []
     prev_dim = input_dim
 
     for i, hidden_dim in enumerate(hidden_dims):
-        linear = nn.Linear(prev_dim, hidden_dim)
+        linear = nn.Linear(prev_dim, hidden_dim, bias=use_bias)
         if random_features:
             for p in linear.parameters():
                 p.requires_grad = False
@@ -124,14 +148,20 @@ def instantiate_mlp_classifier(
             )
             layers.append(Sign())
         else:
-            layers.append(BetaTanh(beta=beta, binarize=binarize))
-            layers.append(nn.Dropout(dropout_rate))
+            if activation.lower() == "beta_tanh":
+                layers.append(BetaTanh(beta=beta, binarize=binarize))
+            elif activation.lower() == "square_tanh":
+                layers.append(SquareTanh(beta=beta, binarize=binarize))
+            else:
+                raise ValueError(f"Unsupported activation: {activation}")
+            if dropout_rate > 0:
+                layers.append(nn.Dropout(dropout_rate))
         prev_dim = hidden_dim
 
     if mup:
-        layers.append(MuReadout(prev_dim, num_classes))
+        layers.append(MuReadout(prev_dim, num_classes, bias=use_bias))
     else:
-        layers.append(nn.Linear(prev_dim, num_classes))
+        layers.append(nn.Linear(prev_dim, num_classes, bias=use_bias))
     return nn.Sequential(*layers)
 
 
@@ -153,6 +183,8 @@ class MLPClassifier(BaseClassifier):
         scheduler_params: Optional[Dict[str, Any]] = None,
         beta: float = 1.0,
         binarize: bool = False,
+        activation: str = "beta_tanh",
+        use_bias: bool = True,
         random_features: Optional[bool] = False,
     ):
         """
@@ -181,6 +213,8 @@ class MLPClassifier(BaseClassifier):
             mup=False,
             beta=beta,
             binarize=binarize,
+            activation=activation,
+            use_bias=use_bias,
         )
 
     def forward(self, x):
@@ -268,6 +302,8 @@ class MuPClassifier(BaseClassifier):
         scheduler_params: Optional[Dict[str, Any]] = None,
         beta: float = 1.0,
         binarize: bool = False,
+        activation: str = "beta_tanh",
+        use_bias: bool = True,
         random_features: Optional[bool] = False,
     ):
         super().__init__(num_classes)
@@ -284,6 +320,8 @@ class MuPClassifier(BaseClassifier):
             mup=True,
             beta=beta,
             binarize=binarize,
+            activation=activation,
+            use_bias=use_bias,
         )
         delta_hidden_dims = [1600] * len(hidden_dims)
         delta_model = instantiate_mlp_classifier(
@@ -295,6 +333,8 @@ class MuPClassifier(BaseClassifier):
             mup=True,
             beta=beta,
             binarize=binarize,
+            activation=activation,
+            use_bias=use_bias,
         )
         model = instantiate_mlp_classifier(
             hidden_dims,
@@ -305,6 +345,8 @@ class MuPClassifier(BaseClassifier):
             mup=True,
             beta=beta,
             binarize=binarize,
+            activation=activation,
+            use_bias=use_bias,
         )
         set_base_shapes(model, base_model, delta=delta_model)
         # for p in model.parameters():
