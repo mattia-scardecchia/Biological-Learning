@@ -53,6 +53,8 @@ def main(cfg: DictConfig):
         random_features=cfg.random_features,
         beta=cfg.model.beta,
         binarize=cfg.model.binarize,
+        activation=cfg.model.activation,
+        use_bias=cfg.model.use_bias,
     )
 
     # Get callbacks
