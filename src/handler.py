@@ -23,6 +23,8 @@ class Handler:
         p_curriculum: float = 0.5,
         skip_overlaps: bool = True,
         save_dir: str = "model",
+        sleep_cycles: int = 0,
+        sleep_strength: float = 0.0,
     ):
         self.classifier = classifier
         self.skip_representations = skip_representations
@@ -31,6 +33,8 @@ class Handler:
         self.init_mode = init_mode
         self.begin_curriculum = begin_curriculum
         self.p_curriculum = p_curriculum
+        self.sleep_cycles = sleep_cycles
+        self.sleep_strength = sleep_strength
         self.flush_logs()
 
         self.output_dir = output_dir
@@ -119,6 +123,13 @@ class Handler:
             "similarity_to_input": (similarity_to_input + 1) / 2,  # L,
         }
 
+    def dream_phase(self):
+        # logging.info("Running dream phase...")
+        J = self.classifier.internal_couplings
+        for i in range(self.sleep_cycles):
+            dJ = (self.sleep_strength / (1 + self.sleep_strength * i)) * (J - J @ J)
+            self.classifier.internal_couplings = J + dJ
+
     def train_epoch(
         self,
         inputs: torch.Tensor,
@@ -162,6 +173,7 @@ class Handler:
             if not self.skip_representations:
                 metrics["update_states"].append(out["update_states"])
             input_idx += batch_size
+        self.dream_phase()  # Run the dream phase after each step
         for key in ["hidden_updates", "hidden_unsat"]:
             metrics[key] = torch.stack(metrics[key]).mean(
                 dim=(0, 1, 3), dtype=torch.float32

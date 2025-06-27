@@ -1191,6 +1191,10 @@ class BatchMeIfUCan:
     def internal_couplings(self):
         return self.couplings[:-1, :, self.H : 2 * self.H]
 
+    @internal_couplings.setter
+    def internal_couplings(self, value):
+        self.couplings[:-1, :, self.H : 2 * self.H] = value
+
     @property
     def left_couplings(self):
         return self.couplings[1:-1, :, : self.H]

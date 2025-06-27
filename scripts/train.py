@@ -318,6 +318,8 @@ def main(cfg):
         cfg.begin_curriculum,
         cfg.p_curriculum,
         skip_overlaps=cfg.skip_overlaps,
+        sleep_cycles=cfg.sleep_cycles,
+        sleep_strength=cfg.sleep_strength,
     )
 
     fields_plots_dir = os.path.join(output_dir, "fields")
