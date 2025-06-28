@@ -57,6 +57,7 @@ def main(cfg):
         "beta_ce": cfg.get("beta_ce_values", [cfg.beta_ce]),
         "double_dynamics": cfg.get("double_dynamics_values", [cfg.double_dynamics]),
         "symmetric_J_init": cfg.get("symmetric_J_init_values", [cfg.symmetric_J_init]),
+        "bias_std": cfg.get("bias_std_values", [cfg.bias_std]),
     }
 
     results_file = os.path.join(output_dir, "grid_search_results.csv")
@@ -91,6 +92,7 @@ def main(cfg):
         beta_ce = hyperparams["beta_ce"]
         double_dynamics = hyperparams["double_dynamics"]
         symmetric_J_init = hyperparams["symmetric_J_init"]
+        bias_std = hyperparams["bias_std"]
 
         lambda_right[-2] = hyperparams["lambda_wback"]
         for i in range(0, cfg.num_layers):
@@ -157,7 +159,7 @@ def main(cfg):
             "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
             "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
             "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
-            "bias_std": cfg.bias_std,
+            "bias_std": bias_std,
             "H": H,
         }
         model_cls = BatchMeIfUCan
