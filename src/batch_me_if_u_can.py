@@ -1252,28 +1252,24 @@ class BatchMeIfUCan:
         is_unsat = (fields * state[:, 1:-1, :]) < 0
         return is_unsat
 
-    def make_checkpoint(self, full: bool = True):
+    def make_checkpoint(self, full: bool = False):
         """
         Make a checkpoint of the model.
         """
-        assert not (self.L > 1 and not full), (
-            "Cannot make a checkpoint for L > 1 without full=True"
-        )
-        state = (
-            {
-                "couplings": self.couplings.clone(),
-                "Wback_skip": self.Wback_skip.clone(),
-                "Wforth_skip": self.Wforth_skip.clone(),
-                "input_skip": self.input_skip.clone(),
-                "input_output_skip": self.input_output_skip.clone(),
-                "bias": self.bias.clone(),
-                "threshold_tensor": self.threshold_tensor.clone(),
-                "lr_tensor": self.lr_tensor.clone(),
-                "weight_decay_tensor": self.weight_decay_tensor.clone(),
-            }
-            if full
-            else {}
-        )
+        if full:
+            raise NotImplementedError("Full checkpointing is not implemented.")
+        state = {}
+        # state = {
+        #     "couplings": self.couplings.clone(),
+        #     "Wback_skip": self.Wback_skip.clone(),
+        #     "Wforth_skip": self.Wforth_skip.clone(),
+        #     "input_skip": self.input_skip.clone(),
+        #     "input_output_skip": self.input_output_skip.clone(),
+        #     "bias": self.bias.clone(),
+        #     "threshold_tensor": self.threshold_tensor.clone(),
+        #     "lr_tensor": self.lr_tensor.clone(),
+        #     "weight_decay_tensor": self.weight_decay_tensor.clone(),
+        # }
         state["W_in"] = self.W_in.clone()
         state["W_back"] = self.W_back.clone()
         state["W_forth"] = self.W_forth.clone()
@@ -1283,12 +1279,12 @@ class BatchMeIfUCan:
                 state[key] = value.cpu().numpy()
         return state
 
-    def load_checkpoint(self, state, full: bool = True):
+    def load_checkpoint(self, state, full: bool = False):
         """
         Load a checkpoint into the model.
         """
         if full:
-            raise NotImplementedError
+            raise NotImplementedError("Full checkpoint loading is not implemented.")
         self.couplings[0, :, self.H : 2 * self.H] = torch.tensor(
             state["J"], dtype=DTYPE
         ).to(self.device)

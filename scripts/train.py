@@ -337,11 +337,41 @@ def main(cfg):
             y,
         )
 
-    # # TODO: DELETE THIS
-    # chkpt_path = "/Users/mat/Desktop/Files/Code/Biological-Learning/outputs/prova/2025-06-30-11-18-26/model.npz"
+    # initial checkpoint
+    checkpoints_path = os.path.join(output_dir, "checkpoints")
+    os.makedirs(checkpoints_path, exist_ok=True)
+    if cfg.save_model_and_data:
+        chkpt = model.make_checkpoint(full=False)
+        save_path = os.path.join(checkpoints_path, "init_model.npz")
+        np.savez(save_path, **chkpt)
+        data_dict = {
+            "train_inputs": train_inputs.cpu().numpy(),
+            "train_targets": train_targets.cpu().numpy(),
+            "eval_inputs": eval_inputs.cpu().numpy(),
+            "eval_targets": eval_targets.cpu().numpy(),
+        }
+        data_path = os.path.join(checkpoints_path, "data.npz")
+        np.savez(data_path, **data_dict)
+
+    # TODO: DELETE THIS
+    # chkpt_path = "/Users/mat/Desktop/Files/Code/Biological-Learning/outputs/prova/2025-06-30-11-37-27/checkpoints/final_model.npz"
     # loaded = np.load(chkpt_path)
     # d_loaded = {key: loaded[key] for key in loaded}
     # model.load_checkpoint(d_loaded, full=False)
+    # data_path = "/Users/mat/Desktop/Files/Code/Biological-Learning/outputs/prova/2025-06-30-11-37-27/checkpoints/data.npz"
+    # loaded = np.load(data_path)
+    # train_inputs = torch.tensor(loaded["train_inputs"], dtype=torch.float32).to(
+    #     cfg.device
+    # )
+    # train_targets = torch.tensor(loaded["train_targets"], dtype=torch.float32).to(
+    #     cfg.device
+    # )
+    # eval_inputs = torch.tensor(loaded["eval_inputs"], dtype=torch.float32).to(
+    #     cfg.device
+    # )
+    # eval_targets = torch.tensor(loaded["eval_targets"], dtype=torch.float32).to(
+    #     cfg.device
+    # )
 
     # ================== Training ==================
     profiler = cProfile.Profile()
@@ -371,14 +401,10 @@ def main(cfg):
     stats.dump_stats(f"profile-{cfg.device}.stats")
 
     # ================== Evaluation and Plotting ==================
-    # save model and data
+    # Final checkpoint
     if cfg.save_model_and_data:
         chkpt = model.make_checkpoint(full=False)
-        chkpt["train_inputs"] = train_inputs.cpu().numpy()
-        chkpt["train_targets"] = train_targets.cpu().numpy()
-        chkpt["eval_inputs"] = eval_inputs.cpu().numpy()
-        chkpt["eval_targets"] = eval_targets.cpu().numpy()
-        save_path = os.path.join(output_dir, "model_and_data.npz")
+        save_path = os.path.join(checkpoints_path, "final_model.npz")
         np.savez(save_path, **chkpt)
 
     # loaded = np.load("data.npz")
