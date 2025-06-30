@@ -5,7 +5,7 @@
 #SBATCH --error=slurm_logs/error/error_%x_%j.txt
 
 #SBATCH --time=3-00:00:00
-#SBATCH --partition=long-gpu
+#SBATCH --partition=long_gpu
 #SBATCH --qos=normal
 
 #SBATCH --ntasks=1
