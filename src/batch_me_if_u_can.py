@@ -178,9 +178,9 @@ class BatchMeIfUCan:
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
         if isinstance(lambda_fc, float):
-            lambda_fc = [
-                lambda_fc
-            ] * num_layers  # 0-th element is for when fc_input is True (otherwise ignored)
+            lambda_fc = (
+                [lambda_fc] * num_layers
+            )  # 0-th element is for when fc_input is True (otherwise ignored)
         if isinstance(lambda_wforth_skip, float):
             lambda_wforth_skip = [lambda_wforth_skip] * (num_layers - 1)
         if isinstance(lambda_wback_skip, float):
@@ -328,6 +328,13 @@ class BatchMeIfUCan:
             f"seed={seed},\n"
         )
 
+        self.bias = (
+            torch.randn(
+                (1, self.L, self.H), device=self.device, generator=self.generator
+            )
+            * self.bias_std
+        )
+
     def prepare_tensors(
         self,
         lr,
@@ -342,9 +349,7 @@ class BatchMeIfUCan:
         self.lr_tensor = self.build_lr_tensor(lr)
         self.weight_decay_tensor = self.build_weight_decay_tensor(weight_decay)
         self.threshold_tensor = threshold.to(self.device)
-        self.ignore_right_mask = (
-            self.build_ignore_right_mask()
-        )  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
+        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
         self.lr_input_skip_tensor = (
             torch.ones_like(self.input_skip, device=self.device)
@@ -750,9 +755,7 @@ class BatchMeIfUCan:
             (0, H - C, 0, 0),
             mode="constant",
             value=0,
-        ).unsqueeze(
-            1
-        )  # (B, C) -> (B, 1, H)
+        ).unsqueeze(1)  # (B, C) -> (B, 1, H)
         state = torch.cat(
             [
                 x_padded,
@@ -845,10 +848,7 @@ class BatchMeIfUCan:
         #     state[:, -2, : self.C] / (self.root_C / 2),
         # )
         # self.last_fields = fields.clone()
-        if ignore_right == 0:
-            fields[:, :-1, :] += self.bias_std * torch.randn(
-                (1, self.L, self.H), device=self.device, generator=self.generator
-            )
+        fields[:, :-1, :] += self.bias
         return fields
 
     def symmetrize_couplings(self):
