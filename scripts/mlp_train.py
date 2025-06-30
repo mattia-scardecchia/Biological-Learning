@@ -1,14 +1,14 @@
 import json
 import logging
 import os
-
 import hydra
 import pytorch_lightning as pl
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import CSVLogger
 
 from scripts.train import get_data
+from datetime import datetime
 from src.mlp import (
     MLPClassifier,
     MuPClassifier,
@@ -62,7 +62,8 @@ def main(cfg: DictConfig):
 
     # Initialize logger
     logger_dir = os.path.join(cfg.logging.dir, cfg.experiment_name)
-    tb_logger = TensorBoardLogger(save_dir=logger_dir, name="")
+    now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    tb_logger = CSVLogger(save_dir=logger_dir, name=f"training_logs_{now_str}")
 
     # Initialize trainer
     trainer = pl.Trainer(
