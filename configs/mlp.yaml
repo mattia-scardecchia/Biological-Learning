@@ -16,7 +16,7 @@ model:
   dropout_rate: 0.0       # Dropout probability
   beta: 1.0 # tanh temperature
   binarize: true  # If true, binarize hidden activations and use straight-through estimator for gradients
-  activation: "beta_tanh"  # Options: beta_tanh, square_tanh
+  activation: "square_tanh"  # Options: beta_tanh, square_tanh
   use_bias: false
 
 # Dataloader parameters
@@ -39,7 +39,7 @@ scheduler:
     
 # Training parameters
 trainer:
-  max_epochs: 20
+  max_epochs: 100
   accelerator: "auto"  # Options: cpu, gpu, auto
   devices: 1
   precision: 32  # Options: 32, 16, "bf16"
@@ -56,7 +56,7 @@ checkpoint_callback:
 
 # Early stopping parameters
 early_stopping:
-  enabled: true
+  enabled: false
   monitor: "train_acc"
   min_delta: 0.001
   patience: 20
