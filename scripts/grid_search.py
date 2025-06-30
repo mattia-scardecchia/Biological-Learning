@@ -58,6 +58,8 @@ def main(cfg):
         "beta_ce": cfg.get("beta_ce_values", [cfg.beta_ce]),
         "double_dynamics": cfg.get("double_dynamics_values", [cfg.double_dynamics]),
         "symmetric_J_init": cfg.get("symmetric_J_init_values", [cfg.symmetric_J_init]),
+        "seed": cfg.get("seed_values", [cfg.seed]),
+        "bias_std": cfg.get("bias_std_values", [cfg.bias_std]),
     }
 
     results_file = os.path.join(output_dir, "grid_search_results.csv")
@@ -101,6 +103,8 @@ def main(cfg):
         threshold[-1] = hyperparams["threshold_readout"]
         for i in range(cfg.num_layers):
             threshold[i] = threshold[i] + J_D
+        seed = hyperparams["seed"]
+        bias_std = hyperparams["bias_std"]
 
         # ================== Model Training ==================
 
@@ -125,7 +129,7 @@ def main(cfg):
             "lambda_internal": cfg.lambda_internal,
             "J_D": J_D,
             "device": cfg.device,
-            "seed": cfg.seed,
+            "seed": seed,
             "lr": torch.tensor(lr),
             "threshold": torch.tensor(threshold),
             "weight_decay": torch.tensor(weight_decay),
@@ -158,7 +162,7 @@ def main(cfg):
             "symmetrize_internal_couplings": cfg.symmetrize_internal_couplings,
             "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
             "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
-            "bias_std": cfg.bias_std,
+            "bias_std": bias_std,
             "H": H,
         }
         model_cls = BatchMeIfUCan
