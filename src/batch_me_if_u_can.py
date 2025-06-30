@@ -941,16 +941,32 @@ class BatchMeIfUCan:
             delta = delta * delta_mask
 
         if self.symmetric_threshold_internal_couplings:
-            delta[:-1, :, self.H : 2 * self.H] = torch.where(
-                (delta[:-1, :, self.H : 2 * self.H] != 0)
-                & (delta[:-1, :, self.H : 2 * self.H].transpose(1, 2) != 0),
+            # delta[:-1, :, self.H : 2 * self.H] = torch.where(
+            #     (delta[:-1, :, self.H : 2 * self.H] != 0)
+            #     & (delta[:-1, :, self.H : 2 * self.H].transpose(1, 2) != 0),
+            #     (
+            #         delta[:-1, :, self.H : 2 * self.H]
+            #         + delta[:-1, :, self.H : 2 * self.H].transpose(1, 2)
+            #     )
+            #     / 2,
+            #     0,
+            # )
+            delta_by_sample = self.lr_tensor.unsqueeze(0) * torch.einsum(
+                "bli,blcj->blicj", neurons * is_unstable, S_unfolded
+            ).flatten(3)
+            delta_by_sample[:, :-1, :, self.H : 2 * self.H] = torch.where(
+                (delta_by_sample[:, :-1, :, self.H : 2 * self.H] != 0)
+                & (
+                    delta_by_sample[:, :-1, :, self.H : 2 * self.H].transpose(2, 3) != 0
+                ),
                 (
-                    delta[:-1, :, self.H : 2 * self.H]
-                    + delta[:-1, :, self.H : 2 * self.H].transpose(1, 2)
+                    delta_by_sample[:, :-1, :, self.H : 2 * self.H]
+                    + delta_by_sample[:, :-1, :, self.H : 2 * self.H].transpose(2, 3)
                 )
                 / 2,
                 0,
             )
+            delta = delta_by_sample.sum(dim=0) / math.sqrt(state.shape[0])
         elif self.symmetric_update_internal_couplings:
             delta[:-1, :, self.H : 2 * self.H] = (
                 delta[:-1, :, self.H : 2 * self.H]
