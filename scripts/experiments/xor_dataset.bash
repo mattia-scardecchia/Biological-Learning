@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=local-structure
+#SBATCH --job-name=xor
 #SBATCH --output=slurm_logs/output/output_%x_%j.txt
 #SBATCH --error=slurm_logs/error/error_%x_%j.txt
 
