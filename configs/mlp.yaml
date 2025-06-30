@@ -69,6 +69,20 @@ logging:
 
 # Hamming balls data
 data:
+  dataset: mnist
+  P: 6000
+  P_eval: 1000
+  mnist:
+    binarize: true
+  cifar:
+    binarize: true
+    cifar10: true
+  hm:
+    C: 2
+    D: 30
+    L: 1
+    width: 300
+    binarize: true
   synthetic:
     P: 30   # Patterns per class (train + val + test)
     C: 10   # Number of classes
