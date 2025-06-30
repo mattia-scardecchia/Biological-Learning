@@ -167,7 +167,7 @@ def get_data(cfg):
         P = cfg.data.P * C
         P_eval = cfg.data.P_eval * C
         logging.warning("Dirty data loading!!!")
-        data_dir = "/Users/mat/Desktop/Files/Code/Biological-Learning/data/marc-data"
+        data_dir = "experiments/xor-data"  # requires pulling git lfs
         inputs = np.load(
             os.path.join(data_dir, f"xi_N100_P{200 if P == 200 else 20000}.npy")
         )
