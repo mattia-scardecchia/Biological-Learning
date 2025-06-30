@@ -21,6 +21,7 @@ conda run -p /home/3144860/.conda/envs/bio python scripts/train.py -cn xor_datas
     name=xor/ours \
     bias_std=0.0,3.0 \
     num_epochs=10 \
+    H=100 \
     seed=0,1,2
 
 # perceptron
@@ -33,7 +34,7 @@ conda run -p /home/3144860/.conda/envs/bio python scripts/mlp_train.py -cn xor_m
 # mlp
 conda run -p /home/3144860/.conda/envs/bio python scripts/mlp_train.py -cn xor_mlp --multirun \
     name=xor/mlp \
-    'model.hidden_dims=[10]' \
+    'model.hidden_dims=[100]' \
     num_epochs=10 \
     model.activation=square_tanh,beta_tanh \
     seed=0,1,2
