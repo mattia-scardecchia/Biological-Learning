@@ -7,7 +7,7 @@ experiment_name: mlp_classifier
 seed: 17
 N: 100  # data dimension
 random_features: false  # if true, freeze all layers except the last
-mup: false
+mup: true
 
 # Model parameters
 model:
