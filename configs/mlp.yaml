@@ -1,6 +1,5 @@
 defaults:
   - /base@_here_
-  - /data@_here_
   - _self_
 
 name: mlp
