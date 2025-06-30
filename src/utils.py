@@ -17,6 +17,18 @@ def theta(x: float):
     return int(x > 0)
 
 
+def symmetricity_level(J: np.ndarray):
+    """
+    normalized between -1 and 1. 1 means perfectly symmetric, -1 means perfectly anti-symmetric.
+    https://math.stackexchange.com/questions/2048817/metric-for-how-symmetric-a-matrix-is
+    """
+    sym_component = 0.5 * (J + J.T)
+    antisym_component = 0.5 * (J - J.T)
+    sym_norm = np.linalg.norm(sym_component)
+    antisym_norm = np.linalg.norm(antisym_component)
+    return (sym_norm - antisym_norm) / (sym_norm + antisym_norm)
+
+
 def plot_fixed_points_similarity_heatmap(
     fixed_points: Dict[int, List[np.ndarray]],
     with_flip_invariance: bool = False,
@@ -159,9 +171,9 @@ def plot_representations_similarity_among_layers(
     """
     if average_inputs:
         # Get a list of all input keys and use one to determine the shape.
-        assert (
-            input_key is None
-        ), "input_key should be None when averaging across inputs."
+        assert input_key is None, (
+            "input_key should be None when averaging across inputs."
+        )
         input_keys = sorted(representations.keys())
         rep0 = representations[input_keys[0]]  # shape: (T, L, N)
     else:

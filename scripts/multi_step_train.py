@@ -10,7 +10,7 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
-from scripts.train import get_data, parse_config, plot_fields_breakdown
+from scripts.train import dump_stats, get_data, parse_config, plot_fields_breakdown
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.handler import Handler
 from src.utils import (
@@ -488,6 +488,8 @@ def main(cfg):
         plot_representation_similarity(
             logs_2, representations_root_dir, cfg, num_epochs
         )
+
+    dump_stats(output_dir, logs_2)
 
 
 if __name__ == "__main__":

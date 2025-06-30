@@ -1,5 +1,6 @@
 import copy
 import cProfile
+import json
 import logging
 import os
 import pstats
@@ -28,6 +29,16 @@ from src.utils import (
     plot_representation_similarity_among_inputs,
     plot_representations_similarity_among_layers,
 )
+
+
+def dump_stats(output_dir, logs):
+    df = {
+        "train_acc_history": logs["train_acc_history"],
+        "eval_acc_history": logs["eval_acc_history"],
+        "symmetricity_history": logs["symmetricity_history"],
+    }
+    with open(os.path.join(output_dir, "stats.json"), "w") as f:
+        json.dump(df, f, indent=4)
 
 
 def plot_representation_similarity(logs, save_dir, cfg):
@@ -466,6 +477,8 @@ def main(cfg):
         "Best train accuracy: {:.2f}".format(np.max(logs["train_acc_history"]))
     )
     logging.info("Best eval accuracy: {:.2f}".format(np.max(logs["eval_acc_history"])))
+
+    dump_stats(output_dir, logs)
 
 
 if __name__ == "__main__":

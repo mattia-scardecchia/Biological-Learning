@@ -1,14 +1,16 @@
 import logging
 import math
-from collections import defaultdict
 import os
+import pickle
+from collections import defaultdict
+
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-import pickle
+
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
-from src.utils import relaxation_trajectory_double_dynamics
+from src.utils import relaxation_trajectory_double_dynamics, symmetricity_level
 
 
 class Handler:
@@ -192,6 +194,7 @@ class Handler:
             "internal_couplings": [],
             "left_couplings": [],
             "right_couplings": [],
+            "symmetricity_history": [],
         }
 
     def log(self, metrics, type):
@@ -204,9 +207,7 @@ class Handler:
                     eval_batch_size,
                     min(self.classifier.C * 30, eval_batch_size),
                     endpoint=False,
-                ).astype(
-                    int
-                )  # NOTE: indexing is relative to the eval batch... hacky
+                ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
                 self.logs["update_representations"].append(
                     metrics["update_states"][idxs, :, :].clone()
                 )
@@ -223,9 +224,7 @@ class Handler:
                 eval_batch_size,
                 min(self.classifier.C * 30, eval_batch_size),
                 endpoint=False,
-            ).astype(
-                int
-            )  # NOTE: indexing is relative to the eval batch... hacky
+            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
             self.logs[f"{type}_representations"].append(
                 metrics["fixed_points"][idxs, :, :].clone()
             )
@@ -244,6 +243,15 @@ class Handler:
                 self.logs["right_couplings"].append(
                     self.classifier.right_couplings.clone()
                 )
+
+    def log_symmetricity(self):
+        symmetricity_by_layer = [
+            float(
+                symmetricity_level(self.classifier.internal_couplings[l].cpu().numpy())
+            )
+            for l in range(self.classifier.L)
+        ]
+        self.logs["symmetricity_history"].append(symmetricity_by_layer)
 
     @torch.no_grad()
     def train_loop(
@@ -274,6 +282,7 @@ class Handler:
         if eval_interval is None:
             eval_interval = num_epochs + 1  # never evaluate
         self.flush_logs()
+        self.log_symmetricity()
 
         for epoch in range(num_epochs):
             train_metrics = self.evaluate(inputs, targets, max_steps_eval)
@@ -306,6 +315,7 @@ class Handler:
                 inputs[keep], targets[keep], max_steps_train, batch_size
             )
             self.log(out, type="update")
+            self.log_symmetricity()
 
             message = (
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
@@ -330,9 +340,7 @@ class Handler:
             for type in ["update", "train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
-                ).permute(
-                    1, 0, 2, 3
-                )  # B, T, L, N
+                ).permute(1, 0, 2, 3)  # B, T, L, N
                 repr_dict = {
                     idx: repr_tensor[idx, :, :, :].cpu().numpy()
                     for idx in range(repr_tensor.shape[0])

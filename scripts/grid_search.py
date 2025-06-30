@@ -10,6 +10,7 @@ from hydra.core.hydra_config import HydraConfig
 from matplotlib import pyplot as plt
 
 from scripts.train import (
+    dump_stats,
     get_data,
     parse_config,
     plot_fields_breakdown,
@@ -25,7 +26,7 @@ from src.utils import (
 
 
 @hydra.main(
-    config_path="../configs", config_name="baseline_1layer_smallP", version_base="1.3"
+    config_path="../configs", config_name="baseline_1layer_largeP", version_base="1.3"
 )
 def main(cfg):
     output_dir = HydraConfig.get().runtime.output_dir
@@ -242,6 +243,8 @@ def main(cfg):
             for key, fig in figs.items():
                 fig.savefig(os.path.join(couplings_root_dir, f"{key}_evolution.png"))
                 plt.close(fig)
+
+        dump_stats(plots_dir, logs)
 
         # ================== Log results ==================
 
