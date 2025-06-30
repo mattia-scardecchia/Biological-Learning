@@ -4,7 +4,7 @@ import os
 import hydra
 import pytorch_lightning as pl
 from hydra.core.hydra_config import HydraConfig
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.loggers import CSVLogger
 
 from scripts.train import get_data
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 @hydra.main(config_path="../configs", config_name="mlp", version_base="1.3")
 def main(cfg: DictConfig):
     output_dir = HydraConfig.get().runtime.output_dir
+    with open(os.path.join(output_dir, "config.json"), "w") as f:
+        json.dump(OmegaConf.to_container(cfg, resolve=True), f, indent=4)
     pl.seed_everything(cfg.seed)
 
     train_inputs, train_targets, eval_inputs, eval_targets, C = get_data(cfg)
