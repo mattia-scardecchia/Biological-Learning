@@ -337,6 +337,12 @@ def main(cfg):
             y,
         )
 
+    # # TODO: DELETE THIS
+    # chkpt_path = "/Users/mat/Desktop/Files/Code/Biological-Learning/outputs/prova/2025-06-30-11-18-26/model.npz"
+    # loaded = np.load(chkpt_path)
+    # d_loaded = {key: loaded[key] for key in loaded}
+    # model.load_checkpoint(d_loaded, full=False)
+
     # ================== Training ==================
     profiler = cProfile.Profile()
     profiler.enable()
@@ -365,6 +371,24 @@ def main(cfg):
     stats.dump_stats(f"profile-{cfg.device}.stats")
 
     # ================== Evaluation and Plotting ==================
+    # save model and data
+    if cfg.save_model_and_data:
+        chkpt = model.make_checkpoint(full=False)
+        chkpt["train_inputs"] = train_inputs.cpu().numpy()
+        chkpt["train_targets"] = train_targets.cpu().numpy()
+        chkpt["eval_inputs"] = eval_inputs.cpu().numpy()
+        chkpt["eval_targets"] = eval_targets.cpu().numpy()
+        save_path = os.path.join(output_dir, "model_and_data.npz")
+        np.savez(save_path, **chkpt)
+
+    # loaded = np.load("data.npz")
+    # d_loaded = {key: loaded[key] for key in loaded}
+    # for key in d_loaded:
+    #     # check equality of loaded and original data
+    #     assert np.array_equal(d_loaded[key], chkpt[key]), (
+    #         f"Loaded {key} does not match original data"
+    #     )
+
     # Field Breakdown
     if not cfg.skip_fields:
         final_plots_dir = os.path.join(fields_plots_dir, "final")

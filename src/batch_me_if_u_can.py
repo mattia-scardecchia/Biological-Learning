@@ -1188,6 +1188,10 @@ class BatchMeIfUCan:
         return self.couplings[:-1, :, self.H : 2 * self.H]
 
     @property
+    def W_in(self):
+        return self.input_skip[0, :, : self.N]
+
+    @property
     def left_couplings(self):
         return self.couplings[1:-1, :, : self.H]
 
@@ -1247,3 +1251,53 @@ class BatchMeIfUCan:
         fields = self.local_field(state, ignore_right=ignore_right)
         is_unsat = (fields * state[:, 1:-1, :]) < 0
         return is_unsat
+
+    def make_checkpoint(self, full: bool = True):
+        """
+        Make a checkpoint of the model.
+        """
+        assert not (self.L > 1 and not full), (
+            "Cannot make a checkpoint for L > 1 without full=True"
+        )
+        state = (
+            {
+                "couplings": self.couplings.clone(),
+                "Wback_skip": self.Wback_skip.clone(),
+                "Wforth_skip": self.Wforth_skip.clone(),
+                "input_skip": self.input_skip.clone(),
+                "input_output_skip": self.input_output_skip.clone(),
+                "bias": self.bias.clone(),
+                "threshold_tensor": self.threshold_tensor.clone(),
+                "lr_tensor": self.lr_tensor.clone(),
+                "weight_decay_tensor": self.weight_decay_tensor.clone(),
+            }
+            if full
+            else {}
+        )
+        state["W_in"] = self.W_in.clone()
+        state["W_back"] = self.W_back.clone()
+        state["W_forth"] = self.W_forth.clone()
+        state["J"] = self.internal_couplings[0, :, :].clone()
+        for key, value in state.items():
+            if isinstance(value, torch.Tensor):
+                state[key] = value.cpu().numpy()
+        return state
+
+    def load_checkpoint(self, state, full: bool = True):
+        """
+        Load a checkpoint into the model.
+        """
+        if full:
+            raise NotImplementedError
+        self.couplings[0, :, self.H : 2 * self.H] = torch.tensor(
+            state["J"], dtype=DTYPE
+        ).to(self.device)
+        self.input_skip[0, :, : self.N] = torch.tensor(state["W_in"], dtype=DTYPE).to(
+            self.device
+        )
+        self.couplings[-2, :, 2 * self.H : 2 * self.H + self.C] = torch.tensor(
+            state["W_back"], dtype=DTYPE
+        ).to(self.device)
+        self.couplings[-1, : self.C, : self.H] = torch.tensor(
+            state["W_forth"], dtype=DTYPE
+        ).to(self.device)

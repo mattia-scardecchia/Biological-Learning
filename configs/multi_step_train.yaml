@@ -88,3 +88,5 @@ skip_fields: false
 skip_overlaps: true
 
 bias_std: 0.0
+
+save_model_and_data: false

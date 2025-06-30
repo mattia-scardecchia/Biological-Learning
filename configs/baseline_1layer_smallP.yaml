@@ -40,7 +40,7 @@ use_local_ce: false
 p_update: 0.8
 beta_ce: 10.0
 lambda_cylinder: null
-num_epochs: 10
+num_epochs: 20
 batch_size: 16
 threshold:
 - 0.5
@@ -87,3 +87,12 @@ symmetrize_internal_couplings: false
 symmetric_update_internal_couplings: false # symmetric_threshold_internal_couplings takes precedence over this
 
 bias_std: 0.0
+
+num_epochs_warmup: 0
+num_epochs_couplings: 0
+num_epochs_full: 20
+num_epochs_tuning: 5
+begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third phase only
+p_curriculum_tuning: 0.5    # affects third phase only
+
+save_model_and_data: false

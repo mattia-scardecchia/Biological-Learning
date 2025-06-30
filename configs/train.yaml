@@ -84,3 +84,5 @@ symmetrize_internal_couplings: false
 symmetric_update_internal_couplings: false # symmetric_threshold_internal_couplings takes precedence over this
 
 bias_std: 0.0
+
+save_model_and_data: false

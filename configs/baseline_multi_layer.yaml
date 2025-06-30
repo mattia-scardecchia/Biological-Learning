@@ -64,8 +64,9 @@ eval_interval: 1
 skip_representations: false
 skip_couplings: false
 skip_fields: false
+skip_overlaps: true
 data:
-  dataset: marc
+  dataset: mnist
   P: 600
   P_eval: 300
   synthetic:
@@ -85,12 +86,17 @@ data:
     binarize: true
 
 num_epochs: 20
-num_epochs_warmup: 10
-num_epochs_couplings: 40
+num_epochs_warmup: 5
+num_epochs_couplings: 20
 num_epochs_full: 0
-num_epochs_tuning: 20
+num_epochs_tuning: 5
 begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third phase only
 p_curriculum_tuning: 0.5    # affects third phase only
 
 symmetric_threshold_internal_couplings: false
 symmetrize_internal_couplings: false
+symmetric_update_internal_couplings: false # symmetric_threshold_internal_couplings takes precedence over this
+
+bias_std: 0.0
+
+save_model_and_data: false

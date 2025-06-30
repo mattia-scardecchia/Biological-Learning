@@ -96,3 +96,5 @@ num_epochs_full: 20
 num_epochs_tuning: 10
 begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third phase only
 p_curriculum_tuning: 0.5    # affects third phase only
+
+save_model_and_data: false
