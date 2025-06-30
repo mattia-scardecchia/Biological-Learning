@@ -11,7 +11,7 @@ mup: false
 
 # Model parameters
 model:
-  hidden_dims: [300]  # Hidden layer dimensions
+  hidden_dims: []  # Hidden layer dimensions
   dropout_rate: 0.0       # Dropout probability
   beta: 1.0 # tanh temperature
   binarize: true  # If true, binarize hidden activations and use straight-through estimator for gradients
@@ -68,9 +68,9 @@ logging:
 
 # Hamming balls data
 data:
-  dataset: mnist
-  P: 6000
-  P_eval: 1000
+  dataset: marc
+  P: 8500
+  P_eval: 1500
   mnist:
     binarize: true
   cifar:
