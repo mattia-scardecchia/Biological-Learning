@@ -23,4 +23,5 @@ conda run -p /home/3144860/.conda/envs/bio python scripts/train.py -cn baseline_
     lambda_input_skip=2.0,5.0 \
     lambda_wback=0.45,0.9 \
     save_model_and_data=true \
+    double_dynamics=true \
     num_epochs=30
