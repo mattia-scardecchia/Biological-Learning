@@ -22,7 +22,10 @@ from src.utils import (
     plot_accuracy_history,
     plot_couplings_distro_evolution,
     plot_couplings_histograms,
+    DTYPE,
 )
+
+torch.set_default_dtype(DTYPE)
 
 
 @hydra.main(

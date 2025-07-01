@@ -28,7 +28,10 @@ from src.utils import (
     plot_couplings_histograms,
     plot_representation_similarity_among_inputs,
     plot_representations_similarity_among_layers,
+    DTYPE,
 )
+
+torch.set_default_dtype(DTYPE)
 
 
 def dump_stats(output_dir, logs):
