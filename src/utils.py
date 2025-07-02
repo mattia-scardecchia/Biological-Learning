@@ -171,9 +171,9 @@ def plot_representations_similarity_among_layers(
     """
     if average_inputs:
         # Get a list of all input keys and use one to determine the shape.
-        assert input_key is None, (
-            "input_key should be None when averaging across inputs."
-        )
+        assert (
+            input_key is None
+        ), "input_key should be None when averaging across inputs."
         input_keys = sorted(representations.keys())
         rep0 = representations[input_keys[0]]  # shape: (T, L, N)
     else:
@@ -492,9 +492,7 @@ def relaxation_trajectory_double_dynamics(
         state_prev = state.clone()
     for step in range(dyn_steps):
         state, _, unsat = classifier.relax(
-            state_prev,
-            max_steps=1,
-            ignore_right=0,
+            state_prev, max_steps=1, ignore_right=0, warmup=0
         )
         overlap = (state_prev[:, 1] * state[:, 1]).sum(dim=-1) / state_prev.shape[-1]
         overlaps.append(overlap)  # B
@@ -505,9 +503,7 @@ def relaxation_trajectory_double_dynamics(
             unsats.append(unsat.clone())
     for step in range(dyn_steps, dyn_steps * 2):
         state, _, unsat = classifier.relax(
-            state_prev,
-            max_steps=1,
-            ignore_right=1,
+            state_prev, max_steps=1, ignore_right=1, warmup=0
         )
         overlap = (state_prev[:, 1] * state[:, 1]).sum(dim=-1) / state_prev.shape[-1]
         overlaps.append(overlap)  # B

@@ -178,9 +178,9 @@ class BatchMeIfUCan:
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
         if isinstance(lambda_fc, float):
-            lambda_fc = (
-                [lambda_fc] * num_layers
-            )  # 0-th element is for when fc_input is True (otherwise ignored)
+            lambda_fc = [
+                lambda_fc
+            ] * num_layers  # 0-th element is for when fc_input is True (otherwise ignored)
         if isinstance(lambda_wforth_skip, float):
             lambda_wforth_skip = [lambda_wforth_skip] * (num_layers - 1)
         if isinstance(lambda_wback_skip, float):
@@ -349,7 +349,9 @@ class BatchMeIfUCan:
         self.lr_tensor = self.build_lr_tensor(lr)
         self.weight_decay_tensor = self.build_weight_decay_tensor(weight_decay)
         self.threshold_tensor = threshold.to(self.device)
-        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
+        self.ignore_right_mask = (
+            self.build_ignore_right_mask()
+        )  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
         self.lr_input_skip_tensor = (
             torch.ones_like(self.input_skip, device=self.device)
@@ -755,7 +757,9 @@ class BatchMeIfUCan:
             (0, H - C, 0, 0),
             mode="constant",
             value=0,
-        ).unsqueeze(1)  # (B, C) -> (B, 1, H)
+        ).unsqueeze(
+            1
+        )  # (B, C) -> (B, 1, H)
         state = torch.cat(
             [
                 x_padded,
@@ -1019,17 +1023,16 @@ class BatchMeIfUCan:
         return is_unstable
 
     def relax(
-        self,
-        state: torch.Tensor,
-        max_steps: int,
-        ignore_right: int,
+        self, state: torch.Tensor, max_steps: int, ignore_right: int, warmup=None
     ):
         sweeps = 0
+        if warmup is None:
+            warmup = self.L
         # self.last_fields = torch.zeros_like(state[:, 1:-1, :], device=self.device)
         # self.mask1 = torch.rand_like(state[0, 1, :], dtype=torch.float32) < 0.5
         # self.mask2 = torch.rand_like(state[0, 2, :], dtype=torch.float32) < 0.5
         while sweeps < max_steps:
-            ir = ignore_right if sweeps >= self.L else 1
+            ir = ignore_right if sweeps >= warmup else 1
             fields = self.local_field(state, ignore_right=ir)
             update_mask = (
                 torch.rand_like(fields) < self.p_update
