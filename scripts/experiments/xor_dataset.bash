@@ -17,12 +17,18 @@ mkdir -p slurm_logs/output slurm_logs/error
 module load miniconda3
 
 # ours
-conda run -p /home/3144860/.conda/envs/bio python scripts/train.py -cn xor_dataset_1layer --multirun \
+# conda run -p /home/3144860/.conda/envs/bio python scripts/train.py -cn xor_dataset_1layer --multirun \
+#     name=xor/ours \
+#     bias_std=0.0,3.0 \
+#     num_epochs=10 \
+#     H=100 \
+#     seed=0,1,2
+conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py -cn xor_dataset_1layer \
     name=xor/ours \
-    bias_std=0.0,3.0 \
+    '+bias_std_values=[0.0,3.0]' \
     num_epochs=10 \
     H=100 \
-    seed=0,1,2
+    '+seed_values=[0,1,2]'
 
 # perceptron
 conda run -p /home/3144860/.conda/envs/bio python scripts/mlp_train.py -cn xor_mlp --multirun \
@@ -36,5 +42,7 @@ conda run -p /home/3144860/.conda/envs/bio python scripts/mlp_train.py -cn xor_m
     name=xor/mlp \
     'model.hidden_dims=[100]' \
     trainer.max_epochs=10 \
-    model.activation=square_tanh,beta_tanh \
+    model.activation=beta_tanh,square_tanh \
+    model.use_bias=true,false \
+    model.binarize=true,false \
     seed=0,1,2
