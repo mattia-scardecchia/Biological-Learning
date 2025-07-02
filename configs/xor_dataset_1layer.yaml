@@ -5,7 +5,7 @@ logging:
   level: INFO
 name: prova
 seed: 17
-device: mps
+device: cuda
 'N': 100
 H: 300
 num_layers: 1
