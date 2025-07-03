@@ -518,3 +518,18 @@ def relaxation_trajectory_double_dynamics(
     unsats = unsats.permute(1, 0, 2, 3)  # B, T, L, N
     overlaps = torch.stack(overlaps, dim=0)  # T', B
     return states, unsats, overlaps
+
+
+def compute_overlaps(states, coord1, coord2):
+    states_1 = states[:, coord1, :]
+    states_2 = states[:, coord2, :]
+    overlaps = (states_1 * states_2).sum(dim=-1) / states_1.shape[-1]
+    mean_overlap = overlaps.mean(dim=0).item()
+    median_overlap = overlaps.quantile(0.5).item()
+    quantiles = overlaps.quantile(0.25).item(), overlaps.quantile(0.75).item()
+    return {
+        "mean": mean_overlap,
+        "median": median_overlap,
+        "quantile_low": quantiles[0],
+        "quantile_high": quantiles[1],
+    }

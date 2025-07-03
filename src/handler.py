@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-import pickle
+from itertools import combinations
 from collections import defaultdict
 
 import numpy as np
@@ -10,7 +10,12 @@ from matplotlib import pyplot as plt
 
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
-from src.utils import relaxation_trajectory_double_dynamics, symmetricity_level
+import json
+from src.utils import (
+    relaxation_trajectory_double_dynamics,
+    symmetricity_level,
+    compute_overlaps,
+)
 
 
 class Handler:
@@ -51,34 +56,27 @@ class Handler:
             train_y,
             steps=steps,
         )
-        states_info = {
-            "steps": steps,
-            "epoch": epoch,
-            "states": states.cpu().numpy(),
-            "unsats": unsats.cpu().numpy(),
-            "overlaps": overlaps.cpu().numpy(),
-            "y": train_y.cpu().numpy(),
-        }
-        with open(
-            os.path.join(save_dir, f"overlaps_train_epoch{epoch}.pkl"), "wb"
-        ) as f:
-            pickle.dump(states_info, f)
-        states, unsats, overlaps = relaxation_trajectory_double_dynamics(
-            self.classifier,
-            eval_x,
-            eval_y,
-            steps=steps,
-        )
-        states_info = {
-            "steps": steps,
-            "epoch": epoch,
-            "states": states.cpu().numpy(),
-            "unsats": unsats.cpu().numpy(),
-            "overlaps": overlaps.cpu().numpy(),
-            "y": eval_y.cpu().numpy(),
-        }
-        with open(os.path.join(save_dir, f"overlaps_eval_epoch{epoch}.pkl"), "wb") as f:
-            pickle.dump(states_info, f)
+        assert self.classifier.L == 1
+        internal_states = states[:, :, 1, :]
+        overlaps_statistics = {step1: {} for step1 in steps}
+        for i, j in combinations(range(len(steps)), 2):
+            step1 = steps[i]
+            step2 = steps[j]
+            overlaps_statistics[step1][step2] = compute_overlaps(internal_states, i, j)
+            overlaps_statistics[step2][step1] = overlaps_statistics[step1][step2]
+        overlaps_path = os.path.join(save_dir, f"overlaps_epoch_{epoch}.json")
+        with open(overlaps_path, "w") as f:
+            json.dump(
+                {
+                    str(step1): {
+                        str(step2): overlaps_statistics[step1][step2]
+                        for step2 in overlaps_statistics[step1]
+                    }
+                    for step1 in overlaps_statistics
+                },
+                f,
+                indent=2,
+            )
 
     def evaluate(
         self,
@@ -207,7 +205,9 @@ class Handler:
                     eval_batch_size,
                     min(self.classifier.C * 30, eval_batch_size),
                     endpoint=False,
-                ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+                ).astype(
+                    int
+                )  # NOTE: indexing is relative to the eval batch... hacky
                 self.logs["update_representations"].append(
                     metrics["update_states"][idxs, :, :].clone()
                 )
@@ -224,7 +224,9 @@ class Handler:
                 eval_batch_size,
                 min(self.classifier.C * 30, eval_batch_size),
                 endpoint=False,
-            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+            ).astype(
+                int
+            )  # NOTE: indexing is relative to the eval batch... hacky
             self.logs[f"{type}_representations"].append(
                 metrics["fixed_points"][idxs, :, :].clone()
             )
@@ -340,7 +342,9 @@ class Handler:
             for type in ["update", "train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
-                ).permute(1, 0, 2, 3)  # B, T, L, N
+                ).permute(
+                    1, 0, 2, 3
+                )  # B, T, L, N
                 repr_dict = {
                     idx: repr_tensor[idx, :, :, :].cpu().numpy()
                     for idx in range(repr_tensor.shape[0])
