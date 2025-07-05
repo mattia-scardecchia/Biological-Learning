@@ -81,27 +81,56 @@ for root, dirs, files in os.walk(base_dir):
             }
             rows.append(row)
 
+
+def clean_col(c):
+    # if there's a dot, drop everything up to and including it
+    base = c.split(".", 1)[1] if "." in c else c
+    # then replace underscores with hyphens
+    return base.replace("_", "-")
+
+
 # dump to CSV
 df = pd.DataFrame(rows)
+df.columns = (
+    df.columns.str.split(".", n=1)
+    .str[-1]  # drop everything up to the first dot
+    .str.replace("_", "-", regex=False)  # then underscores → hyphens
+)
+df["activation"] = df["activation"].str.replace("_", "-", regex=False)
 df.to_csv(os.path.join(base_dir, "results.csv"), index=False)
 print("Saved results to 'results.csv'")
 
 
 # all columns except seed and the two metrics
-group_cols = [c for c in df.columns if c not in {"seed", "train_acc", "test_acc"}]
+group_cols = [c for c in df.columns if c not in {"seed", "train-acc", "test-acc"}]
 
 # compute mean and std across seeds
 summary = (
     df.groupby(group_cols, dropna=False)
     .agg(
-        train_acc_mean=("train_acc", "mean"),
-        train_acc_std=("train_acc", "std"),
-        test_acc_mean=("test_acc", "mean"),
-        test_acc_std=("test_acc", "std"),
+        train_acc_mean=("train-acc", "mean"),
+        train_acc_std=("train-acc", "std"),
+        test_acc_mean=("test-acc", "mean"),
+        test_acc_std=("test-acc", "std"),
     )
     .reset_index()
 )
 
 # write out the summary
+summary.columns = summary.columns.str.replace("_", "-", regex=False)
 summary.to_csv(os.path.join(base_dir, "summary_results.csv"), index=False)
 print("Saved per‐config summary to 'summary_results.csv'")
+
+
+latex_table = summary.to_latex(
+    index=False,  # drop the DataFrame index
+    longtable=False,  # simple tabular, not longtable
+    caption="Xor Dataset",  # optional: adds a caption
+    label="tab:results",  # optional: adds a label
+)
+
+# write to file
+with open(os.path.join(base_dir, "table.tex"), "w", encoding="utf-8") as f:
+    f.write(latex_table)
+
+print("LaTeX table written to table.tex")
