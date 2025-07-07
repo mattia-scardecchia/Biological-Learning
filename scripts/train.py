@@ -56,8 +56,9 @@ def log_representations(logs, save_dir, cfg):
         P = len(representations.keys())
         X = np.stack([representations[p] for p in range(P)], axis=2)
         input_input_overlaps = np.einsum("tlph,tlqh->tlpq", X, X) / X.shape[3]
+        input_labels = logs[f"{dirname}_labels"]
         handle_input_input_overlaps(
-            input_input_overlaps / 2 + 0.5, plot_dir, cfg.num_epochs
+            input_input_overlaps / 2 + 0.5, plot_dir, cfg.num_epochs, input_labels
         )
 
         for input_idx in np.random.choice(
