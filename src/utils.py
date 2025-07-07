@@ -89,6 +89,38 @@ def plot_accuracy_history(train_acc_history, eval_acc_history=None, eval_epochs=
     return fig
 
 
+def handle_input_input_overlaps(
+    input_input_overlaps: np.ndarray, plot_dir: str, num_epochs: int
+):
+    np.save(f"{plot_dir}/input_input_overlap.npy", input_input_overlaps)
+    T, L, P, _ = input_input_overlaps.shape
+    for epoch in np.linspace(0, num_epochs, min(5, num_epochs), endpoint=False).astype(
+        int
+    ):
+        fig, axes = plt.subplots(1, L, figsize=(5 * L, 4))
+        if L == 1:
+            axes = [axes]
+        for l, ax in enumerate(axes):
+            sns.heatmap(
+                input_input_overlaps[epoch, l, :, :],
+                cmap="seismic",
+                vmin=0,
+                vmax=1,
+                ax=ax,
+                cbar=(l == L - 1),
+            )
+            non_diagonal_mask = ~np.eye(P, dtype=bool)
+            avg_sim_off_diagonal = np.mean(
+                input_input_overlaps[epoch, l, :, :][non_diagonal_mask]
+            )
+            ax.set_title(f"Epoch {epoch}, Layer {l}. Avg: {avg_sim_off_diagonal:.2f}")
+            ax.set_xlabel("Input")
+            ax.set_ylabel("Input")
+        fig.tight_layout()
+        fig.savefig(f"{plot_dir}/epoch_{epoch}.png")
+        plt.close(fig)
+
+
 def plot_representation_similarity_among_inputs(representations, epoch, layer_skip=1):
     """
     For a fixed epoch, plot a heatmap for each layer (or every kth layer) that shows the similarity
@@ -171,9 +203,9 @@ def plot_representations_similarity_among_layers(
     """
     if average_inputs:
         # Get a list of all input keys and use one to determine the shape.
-        assert (
-            input_key is None
-        ), "input_key should be None when averaging across inputs."
+        assert input_key is None, (
+            "input_key should be None when averaging across inputs."
+        )
         input_keys = sorted(representations.keys())
         rep0 = representations[input_keys[0]]  # shape: (T, L, N)
     else:

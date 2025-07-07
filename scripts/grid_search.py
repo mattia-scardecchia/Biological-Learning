@@ -12,9 +12,9 @@ from matplotlib import pyplot as plt
 from scripts.train import (
     dump_stats,
     get_data,
+    log_representations,
     parse_config,
     plot_fields_breakdown,
-    plot_representation_similarity,
 )
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.handler import Handler
@@ -233,7 +233,7 @@ def main(cfg):
         if not cfg.skip_representations:
             representations_root_dir = os.path.join(plots_dir, "representations")
             os.makedirs(representations_root_dir, exist_ok=True)
-            plot_representation_similarity(logs, representations_root_dir, cfg)
+            log_representations(logs, representations_root_dir, cfg)
 
         # Couplings
         if not cfg.skip_couplings:

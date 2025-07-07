@@ -22,11 +22,11 @@ from src.data import (
 )
 from src.handler import Handler
 from src.utils import (
+    handle_input_input_overlaps,
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_couplings_distro_evolution,
     plot_couplings_histograms,
-    plot_representation_similarity_among_inputs,
     plot_representations_similarity_among_layers,
 )
 
@@ -41,7 +41,7 @@ def dump_stats(output_dir, logs):
         json.dump(df, f, indent=4)
 
 
-def plot_representation_similarity(logs, save_dir, cfg):
+def log_representations(logs, save_dir, cfg):
     for representations, dirname in zip(
         [
             logs["update_representations"],
@@ -52,14 +52,14 @@ def plot_representation_similarity(logs, save_dir, cfg):
     ):
         plot_dir = os.path.join(save_dir, dirname)
         os.makedirs(plot_dir, exist_ok=True)
-        for epoch in np.linspace(
-            0, cfg.num_epochs, min(5, cfg.num_epochs), endpoint=False
-        ).astype(int):
-            fig = plot_representation_similarity_among_inputs(
-                representations, epoch, layer_skip=1
-            )
-            plt.savefig(os.path.join(plot_dir, f"epoch_{epoch}.png"))
-            plt.close(fig)
+
+        P = len(representations.keys())
+        X = np.stack([representations[p] for p in range(P)], axis=2)
+        input_input_overlaps = np.einsum("tlph,tlqh->tlpq", X, X) / X.shape[3]
+        handle_input_input_overlaps(
+            input_input_overlaps / 2 + 0.5, plot_dir, cfg.num_epochs
+        )
+
         for input_idx in np.random.choice(
             list(representations.keys()), 3, replace=False
         ):
@@ -458,7 +458,7 @@ def main(cfg):
         # Representations
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
-        plot_representation_similarity(logs, representations_root_dir, cfg)
+        log_representations(logs, representations_root_dir, cfg)
 
     # Couplings
     if not cfg.skip_couplings:
