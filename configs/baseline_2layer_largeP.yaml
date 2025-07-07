@@ -7,10 +7,10 @@ name: prova
 seed: 17
 device: mps
 'N': 100
-H: 300
+H: 1600
 num_layers: 2
 J_D: 0.5
-max_steps_train: 7
+max_steps_train: 5
 max_steps_eval: ${max_steps_train}
 init_mode: zeros
 init_noise: 0.0
@@ -20,18 +20,18 @@ lambda_l: 0.0
 lambda_r: ${lambda_l}
 lambda_internal: [1.0, 0.0]
 lambda_fc: 1.0
-lambda_wback_skip: [0.5]
+lambda_wback_skip: [0.9]
 lambda_wback: 5.0
 lambda_input_skip:
 - 5.0
-- 2.5
+- 2.0
 lambda_input_output_skip: 0.0
-lambda_wforth_skip: [0.5]
+lambda_wforth_skip: [0.0]
 lambda_wforth: 1.0
 fc_left: true
 fc_right: false
 fc_input: false
-zero_fc_init: true
+zero_fc_init: false
 symmetrize_fc: false
 symmetric_W: false
 symmetric_J_init: false
@@ -44,12 +44,12 @@ lambda_cylinder: null
 num_epochs: 20
 batch_size: 16
 threshold:
-- 0.5
-- 0.5
+- 0.9
+- 0.9
 - 3.0
 lr_input_output_skip: 0.1
 lr_input_skip: 0.03
-lr_J: 0.01
+lr_J: 0.005
 lr_W: 0.1
 lr_wforth_skip: 0.1
 weight_decay_J: 0.005
@@ -66,8 +66,8 @@ skip_fields: false
 skip_overlaps: true
 data:
   dataset: mnist
-  P: 600
-  P_eval: 300
+  P: 6000
+  P_eval: 1000
   synthetic:
     C: 10
     p: 0.35
@@ -98,3 +98,4 @@ begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third 
 p_curriculum_tuning: 0.5    # affects third phase only
 
 save_model_and_data: false
+inference_ignore_right: 1  # for inference mode

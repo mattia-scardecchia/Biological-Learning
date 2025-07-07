@@ -100,3 +100,4 @@ symmetric_update_internal_couplings: false # symmetric_threshold_internal_coupli
 bias_std: 0.0
 
 save_model_and_data: false
+inference_ignore_right: 1  # for inference mode

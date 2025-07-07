@@ -239,8 +239,13 @@ def parse_config(cfg):
     except Exception:
         threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
     assert isinstance(cfg.J_D, (float, int))
+    logging.warning(f"Adding J_D ({cfg.J_D}) to threshold")
     for i in range(cfg.num_layers):
         threshold[i] = threshold[i] + cfg.J_D
+    if cfg.inference_ignore_right == 4 and cfg.lambda_l == cfg.lambda_r:
+        logging.warning(f"Adding lambda_l ({cfg.lambda_l}) to threshold")
+        for i in range(cfg.num_layers):
+            threshold[i] = threshold[i] + cfg.lambda_l
     try:
         lambda_left = cfg.lambda_left
     except Exception:
@@ -317,6 +322,7 @@ def main(cfg):
         "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
         "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
         "bias_std": cfg.bias_std,
+        "inference_ignore_right": cfg.inference_ignore_right,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan

@@ -60,6 +60,7 @@ def main(cfg):
         "symmetric_J_init": cfg.get("symmetric_J_init_values", [cfg.symmetric_J_init]),
         "seed": cfg.get("seed_values", [cfg.seed]),
         "bias_std": cfg.get("bias_std_values", [cfg.bias_std]),
+        "lambda_l": cfg.get("lambda_l_values", [cfg.lambda_l]),
     }
 
     results_file = os.path.join(output_dir, "grid_search_results.csv")
@@ -101,10 +102,20 @@ def main(cfg):
             lr[i] = hyperparams["lr_J"]
             weight_decay[i] = hyperparams["weight_decay_J"]
         threshold[-1] = hyperparams["threshold_readout"]
+        logging.warning(f"Adding J_D ({J_D}) to threshold")
         for i in range(cfg.num_layers):
             threshold[i] = threshold[i] + J_D
         seed = hyperparams["seed"]
         bias_std = hyperparams["bias_std"]
+
+        logging.warning("setting lambda_r equal to lambda_l")
+        for i in range(1, cfg.num_layers):
+            lambda_left[i] = hyperparams["lambda_l"]
+            lambda_right[i - 1] = hyperparams["lambda_l"]
+        if cfg.inference_ignore_right == 4:
+            logging.warning(f"Adding lambda_l ({hyperparams['lambda_l']}) to threshold")
+            for i in range(cfg.num_layers):
+                threshold[i] = threshold[i] + hyperparams["lambda_l"]
 
         # ================== Model Training ==================
 
@@ -163,6 +174,7 @@ def main(cfg):
             "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
             "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
             "bias_std": bias_std,
+            "inference_ignore_right": cfg.inference_ignore_right,
             "H": H,
         }
         model_cls = BatchMeIfUCan
