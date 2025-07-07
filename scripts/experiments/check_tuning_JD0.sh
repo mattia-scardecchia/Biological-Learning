@@ -1,6 +1,5 @@
 #!/bin/bash
-
-conda run -p /home/3144860/.conda/envs/bio python scripts/grid_search.py -cn baseline_1layer_largeP \
+python scripts/grid_search.py -cn baseline_1layer_largeP \
     name=tuning-JD0 \
     J_D=0.0 \
     lambda_input_skip=5.0 \
