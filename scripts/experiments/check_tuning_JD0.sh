@@ -9,3 +9,5 @@ python scripts/grid_search.py -cn baseline_1layer_largeP \
     lambda_wback=0.3,0.6,0.9 \
     num_epochs=20 \
     --multirun
+
+# NOTE: remember to vary lr_J and lr_input_skip together!
