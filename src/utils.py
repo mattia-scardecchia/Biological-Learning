@@ -95,8 +95,8 @@ def handle_input_input_overlaps(
     num_epochs: int,
     input_labels: np.ndarray,
 ):
-    np.save(f"{plot_dir}/input_input_overlap.npy", input_input_overlaps)
-    np.save(f"{plot_dir}/input_labels.npy", input_labels)
+    # np.save(f"{plot_dir}/input_input_overlap.npy", input_input_overlaps)
+    # np.save(f"{plot_dir}/input_labels.npy", input_labels)
     T, L, P, _ = input_input_overlaps.shape
     for epoch in np.linspace(0, num_epochs, min(5, num_epochs), endpoint=False).astype(
         int
