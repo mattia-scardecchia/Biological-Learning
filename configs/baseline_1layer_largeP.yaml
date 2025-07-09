@@ -34,7 +34,7 @@ zero_fc_init: true
 symmetrize_fc: false
 symmetric_W: false
 symmetric_J_init: false
-double_dynamics: false
+double_dynamics: true
 double_update: false
 use_local_ce: false
 p_update: 1.0
@@ -89,3 +89,5 @@ bias_std: 0.0
 
 save_model_and_data: false
 inference_ignore_right: 1  # for inference mode
+
+num_frames: 5

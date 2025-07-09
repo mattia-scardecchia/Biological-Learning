@@ -1,0 +1,1 @@
+python scripts/train.py -cn baseline_1layer_largeP data.P=300 data.P_eval=300 device=mps double_dynamics=true num_frames=50 num_epochs=50 lambda_wback=2.4

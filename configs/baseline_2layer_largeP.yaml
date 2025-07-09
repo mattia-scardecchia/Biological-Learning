@@ -99,3 +99,5 @@ p_curriculum_tuning: 0.5    # affects third phase only
 
 save_model_and_data: false
 inference_ignore_right: 1  # for inference mode
+
+num_frames: 5

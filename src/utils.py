@@ -94,13 +94,14 @@ def handle_input_input_overlaps(
     plot_dir: str,
     num_epochs: int,
     input_labels: np.ndarray,
+    num_frames: int,
 ):
     # np.save(f"{plot_dir}/input_input_overlap.npy", input_input_overlaps)
     # np.save(f"{plot_dir}/input_labels.npy", input_labels)
     T, L, P, _ = input_input_overlaps.shape
-    for epoch in np.linspace(0, num_epochs, min(5, num_epochs), endpoint=False).astype(
-        int
-    ):
+    for epoch in np.linspace(
+        0, num_epochs, min(num_frames, num_epochs), endpoint=False
+    ).astype(int):
         fig, axes = plt.subplots(1, L, figsize=(5 * L, 4))
         if L == 1:
             axes = [axes]

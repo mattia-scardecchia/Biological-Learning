@@ -91,3 +91,5 @@ bias_std: 0.0
 
 save_model_and_data: false
 inference_ignore_right: 4  # for inference mode
+
+num_frames: 5
