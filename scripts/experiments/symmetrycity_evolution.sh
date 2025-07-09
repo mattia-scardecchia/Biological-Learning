@@ -26,7 +26,7 @@
 # # #     H=400 \
 # # #     num_epochs=200
 
-python scripts/grid_search.py -cn baseline_1layer_largeP name=symmetric_rules/perceptron \
+python scripts/grid_search.py -cn baseline_1layer_largeP name=sym_evolution \
     J_D=0.0,0.5 \
     '+lambda_input_skip_values=[2.0,5.0]' \
     double_dynamics=true \
