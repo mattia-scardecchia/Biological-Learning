@@ -9,7 +9,7 @@ device: mps
 'N': 100
 H: 1600
 num_layers: 2
-J_D: 0.5
+J_D: 1.0
 max_steps_train: 5
 max_steps_eval: ${max_steps_train}
 init_mode: zeros
@@ -18,7 +18,7 @@ lambda_x: 0.0
 lambda_y: 1000.0
 lambda_l: 0.0
 lambda_r: ${lambda_l}
-lambda_internal: [1.0, 0.0]
+lambda_internal: [1.0, 1.0]
 lambda_fc: 1.0
 lambda_wback_skip: [0.9]
 lambda_wback: 5.0
@@ -35,7 +35,7 @@ zero_fc_init: false
 symmetrize_fc: false
 symmetric_W: false
 symmetric_J_init: false
-double_dynamics: false
+double_dynamics: true
 double_update: false
 use_local_ce: false
 p_update: 0.8
