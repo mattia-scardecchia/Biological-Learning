@@ -24,7 +24,7 @@ lambda_wback_skip: [0.9]
 lambda_wback: 5.0
 lambda_input_skip:
 - 5.0
-- 2.0
+- 5.0
 lambda_input_output_skip: 0.0
 lambda_wforth_skip: [0.0]
 lambda_wforth: 1.0
@@ -98,6 +98,6 @@ begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third 
 p_curriculum_tuning: 0.5    # affects third phase only
 
 save_model_and_data: false
-inference_ignore_right: 1  # for inference mode
+inference_ignore_right: 4  # for inference mode
 
 num_frames: 5
