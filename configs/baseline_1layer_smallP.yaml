@@ -34,13 +34,13 @@ zero_fc_init: true
 symmetrize_fc: false
 symmetric_W: false
 symmetric_J_init: false
-double_dynamics: false
+double_dynamics: true
 double_update: false
 use_local_ce: false
 p_update: 0.8
 beta_ce: 10.0
 lambda_cylinder: null
-num_epochs: 20
+num_epochs: 3
 batch_size: 16
 threshold:
 - 0.5
@@ -96,3 +96,6 @@ begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third 
 p_curriculum_tuning: 0.5    # affects third phase only
 
 save_model_and_data: false
+inference_ignore_right: 1  # for inference mode
+
+num_frames: 5

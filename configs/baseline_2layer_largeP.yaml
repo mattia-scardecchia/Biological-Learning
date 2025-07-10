@@ -1,0 +1,103 @@
+defaults:
+  - base
+  - _self_
+logging:
+  level: INFO
+name: prova
+seed: 17
+device: mps
+'N': 100
+H: 1600
+num_layers: 2
+J_D: 1.0
+max_steps_train: 5
+max_steps_eval: ${max_steps_train}
+init_mode: zeros
+init_noise: 0.0
+lambda_x: 0.0
+lambda_y: 1000.0
+lambda_l: 0.0
+lambda_r: ${lambda_l}
+lambda_internal: [1.0, 1.0]
+lambda_fc: 1.0
+lambda_wback_skip: [0.9]
+lambda_wback: 5.0
+lambda_input_skip:
+- 5.0
+- 5.0
+lambda_input_output_skip: 0.0
+lambda_wforth_skip: [0.0]
+lambda_wforth: 1.0
+fc_left: true
+fc_right: false
+fc_input: false
+zero_fc_init: false
+symmetrize_fc: false
+symmetric_W: false
+symmetric_J_init: false
+double_dynamics: true
+double_update: false
+use_local_ce: false
+p_update: 0.8
+beta_ce: 10.0
+lambda_cylinder: null
+num_epochs: 20
+batch_size: 16
+threshold:
+- 0.9
+- 0.9
+- 3.0
+lr_input_output_skip: 0.1
+lr_input_skip: 0.03
+lr_J: 0.005
+lr_W: 0.1
+lr_wforth_skip: 0.1
+weight_decay_J: 0.005
+weight_decay_W: 0.005
+weight_decay_wforth_skip: 0.005
+weight_decay_input_skip: 0.0
+weight_decay_input_output_skip: 0.005
+begin_curriculum: 1.0
+p_curriculum: 0.5
+eval_interval: 1
+skip_representations: false
+skip_couplings: false
+skip_fields: false
+skip_overlaps: true
+data:
+  dataset: mnist
+  P: 6000
+  P_eval: 1000
+  synthetic:
+    C: 10
+    p: 0.35
+    save_dir: data
+  mnist:
+    binarize: true
+  cifar:
+    binarize: true
+    cifar10: true
+  hm:
+    C: 2
+    D: 30
+    L: 1
+    width: 300
+    binarize: true
+
+symmetric_threshold_internal_couplings: false
+symmetrize_internal_couplings: false
+symmetric_update_internal_couplings: false # symmetric_threshold_internal_couplings takes precedence over this
+
+bias_std: 0.0
+
+num_epochs_warmup: 0
+num_epochs_couplings: 0
+num_epochs_full: 20
+num_epochs_tuning: 10
+begin_curriculum_tuning: 1.0  # in [0,1). if >= 1, no curriculum. affects third phase only
+p_curriculum_tuning: 0.5    # affects third phase only
+
+save_model_and_data: false
+inference_ignore_right: 4  # for inference mode
+
+num_frames: 5

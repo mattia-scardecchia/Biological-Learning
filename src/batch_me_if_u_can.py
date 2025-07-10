@@ -7,8 +7,6 @@ import torch.nn.functional as F
 
 from src.utils import DTYPE
 
-IGNORE_RIGHT = 1  # for inference mode
-
 # @torch.compile(mode="max-autotune")
 # def relax_kernel(state, couplings, mask, steps):
 #     for _ in range(steps):
@@ -156,6 +154,7 @@ class BatchMeIfUCan:
         symmetrize_internal_couplings: bool,
         zero_fc_init: bool,
         bias_std: float,
+        inference_ignore_right: int = 1,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -178,9 +177,9 @@ class BatchMeIfUCan:
         if isinstance(lambda_internal, float):
             lambda_internal = [lambda_internal] * num_layers
         if isinstance(lambda_fc, float):
-            lambda_fc = [
-                lambda_fc
-            ] * num_layers  # 0-th element is for when fc_input is True (otherwise ignored)
+            lambda_fc = (
+                [lambda_fc] * num_layers
+            )  # 0-th element is for when fc_input is True (otherwise ignored)
         if isinstance(lambda_wforth_skip, float):
             lambda_wforth_skip = [lambda_wforth_skip] * (num_layers - 1)
         if isinstance(lambda_wback_skip, float):
@@ -250,6 +249,7 @@ class BatchMeIfUCan:
         self.symmetric_update_internal_couplings = symmetric_update_internal_couplings
         self.symmetrize_internal_couplings = symmetrize_internal_couplings
         self.bias_std = bias_std
+        self.inference_ignore_right = inference_ignore_right
 
         self.root_H = torch.sqrt(torch.tensor(H, device=device))
         self.root_N = torch.sqrt(torch.tensor(N, device=device))
@@ -324,6 +324,7 @@ class BatchMeIfUCan:
             f"symmetrize_internal_couplings={symmetrize_internal_couplings},\n"
             f"zero_fc_init={zero_fc_init},\n"
             f"bias_std={bias_std},\n"
+            f"inference_ignore_right={inference_ignore_right},\n"
             f"device={device},\n"
             f"seed={seed},\n"
         )
@@ -349,9 +350,7 @@ class BatchMeIfUCan:
         self.lr_tensor = self.build_lr_tensor(lr)
         self.weight_decay_tensor = self.build_weight_decay_tensor(weight_decay)
         self.threshold_tensor = threshold.to(self.device)
-        self.ignore_right_mask = (
-            self.build_ignore_right_mask()
-        )  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
+        self.ignore_right_mask = self.build_ignore_right_mask()  # 0: no; 1: yes; 2: yes, only label; 3: yes, only Wback feedback; 4: yes, label and Wback feedback.
 
         self.lr_input_skip_tensor = (
             torch.ones_like(self.input_skip, device=self.device)
@@ -757,9 +756,7 @@ class BatchMeIfUCan:
             (0, H - C, 0, 0),
             mode="constant",
             value=0,
-        ).unsqueeze(
-            1
-        )  # (B, C) -> (B, 1, H)
+        ).unsqueeze(1)  # (B, C) -> (B, 1, H)
         state = torch.cat(
             [
                 x_padded,
@@ -923,7 +920,9 @@ class BatchMeIfUCan:
         state: torch.Tensor,
         delta_mask: Optional[torch.Tensor] = None,
     ):
-        fields = self.local_field(state, ignore_right=IGNORE_RIGHT)  # shape (B, L+1, H)
+        fields = self.local_field(
+            state, ignore_right=self.inference_ignore_right
+        )  # shape (B, L+1, H)
         neurons = state[:, 1:-1, :]  # shape (B, L+1, H)
         S_unfolded = state.unfold(1, 3, 1).transpose(-2, -1)  # shape (B, L+1, 3, H)
         if self.use_local_ce:
@@ -1032,7 +1031,7 @@ class BatchMeIfUCan:
         # self.mask1 = torch.rand_like(state[0, 1, :], dtype=torch.float32) < 0.5
         # self.mask2 = torch.rand_like(state[0, 2, :], dtype=torch.float32) < 0.5
         while sweeps < max_steps:
-            ir = ignore_right if sweeps >= warmup else 1
+            ir = ignore_right if sweeps >= warmup else self.inference_ignore_right
             fields = self.local_field(state, ignore_right=ir)
             update_mask = (
                 torch.rand_like(fields) < self.p_update
@@ -1054,10 +1053,12 @@ class BatchMeIfUCan:
         # state[:, 1:-1, 0] = 0
         return state, sweeps, unsat
 
-    def double_relax(self, state, max_sweeps):
+    def double_relax(self, state, max_sweeps, warmup=None):
         sweeps = 0
+        if warmup is None:
+            warmup = self.L
         while sweeps < max_sweeps:
-            ir = 0 if sweeps >= self.L else 1
+            ir = 0 if sweeps >= warmup else self.inference_ignore_right
             fields = self.local_field(state, ignore_right=ir)
             update_mask = (
                 torch.rand_like(fields) < self.p_update
@@ -1169,11 +1170,11 @@ class BatchMeIfUCan:
             self.init_mode,
         )
         final_state, num_sweeps, unsat = self.relax(
-            state, max_sweeps, ignore_right=IGNORE_RIGHT
+            state, max_sweeps, ignore_right=self.inference_ignore_right
         )
-        logits = self.local_field(final_state, ignore_right=IGNORE_RIGHT)[
-            :, -1, : self.C
-        ]
+        logits = self.local_field(
+            final_state, ignore_right=self.inference_ignore_right
+        )[:, -1, : self.C]
         # logits = final_state[:, -3] @ self.couplings[-1, : self.C, : self.H].T
         # logits += torch.einsum("lch,blh->bc", self.Wforth_skip, final_state[:, 1:-3, :])
         # logits += torch.einsum(

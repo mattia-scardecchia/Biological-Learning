@@ -119,6 +119,7 @@ def main(cfg):
         "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
         "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
         "bias_std": cfg.bias_std,
+        "inference_ignore_right": cfg.inference_ignore_right,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan

@@ -152,6 +152,8 @@ def instantiate_mlp_classifier(
                 layers.append(BetaTanh(beta=beta, binarize=binarize))
             elif activation.lower() == "square_tanh":
                 layers.append(SquareTanh(beta=beta, binarize=binarize))
+            elif activation.lower() == "relu":
+                layers.append(nn.ReLU())
             else:
                 raise ValueError(f"Unsupported activation: {activation}")
             if dropout_rate > 0:

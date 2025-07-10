@@ -1,8 +1,9 @@
+import json
 import logging
 import math
 import os
-from itertools import combinations
 from collections import defaultdict
+from itertools import combinations
 
 import numpy as np
 import torch
@@ -10,11 +11,10 @@ from matplotlib import pyplot as plt
 
 from src.batch_me_if_u_can import BatchMeIfUCan
 from src.classifier import Classifier
-import json
 from src.utils import (
+    compute_overlaps,
     relaxation_trajectory_double_dynamics,
     symmetricity_level,
-    compute_overlaps,
 )
 
 
@@ -114,9 +114,10 @@ class Handler:
         return {
             "overall_accuracy": accuracy,
             "accuracy_by_class": accuracy_by_class,
-            "fixed_points": states,  # B, L, N
-            "logits": logits,  # B, C
+            "fixed_points": states.cpu(),  # B, L, N
+            "logits": logits.cpu(),  # B, C
             "similarity_to_input": (similarity_to_input + 1) / 2,  # L,
+            "labels": ground_truth.cpu(),  # B,
         }
 
     def train_epoch(
@@ -150,6 +151,7 @@ class Handler:
             x = inputs[batch_idxs]
             y = targets[batch_idxs]
             out = self.classifier.train_step(x, y, max_steps)
+            metrics["labels"].append(torch.argmax(y, dim=1))
             metrics["sweeps"].append(out["sweeps"])
             metrics["hidden_updates"].append(out["hidden_updates"])
             metrics["readout_updates"].append(out["readout_updates"])
@@ -163,21 +165,22 @@ class Handler:
                 metrics["update_states"].append(out["update_states"])
             input_idx += batch_size
         for key in ["hidden_updates", "hidden_unsat"]:
-            metrics[key] = torch.stack(metrics[key]).mean(
-                dim=(0, 1, 3), dtype=torch.float32
+            metrics[key] = (
+                torch.stack(metrics[key]).mean(dim=(0, 1, 3), dtype=torch.float32).cpu()
             )
         for key in ["readout_updates", "readout_unsat"]:
-            metrics[key] = torch.stack(metrics[key]).mean(
-                dim=(0, 1, 2), dtype=torch.float32
+            metrics[key] = (
+                torch.stack(metrics[key]).mean(dim=(0, 1, 2), dtype=torch.float32).cpu()
             )
+        metrics["labels"] = torch.cat(metrics["labels"], dim=0).cpu()
         metrics["similarity_to_input"] = (
-            torch.stack(metrics["similarity_to_input"], dim=0).mean(dim=0) + 1
+            torch.stack(metrics["similarity_to_input"], dim=0).mean(dim=0).cpu() + 1
         ) / 2
         if not self.skip_representations:
             inverse_idxs_perm = torch.argsort(idxs_perm[:input_idx])
             metrics["update_states"] = torch.cat(metrics["update_states"], dim=0)[
                 inverse_idxs_perm, ...
-            ]
+            ].cpu()
         return metrics
 
     def flush_logs(self):
@@ -193,6 +196,9 @@ class Handler:
             "left_couplings": [],
             "right_couplings": [],
             "symmetricity_history": [],
+            "update_labels": [],
+            "train_labels": [],
+            "eval_labels": [],
         }
 
     def log(self, metrics, type):
@@ -205,12 +211,11 @@ class Handler:
                     eval_batch_size,
                     min(self.classifier.C * 30, eval_batch_size),
                     endpoint=False,
-                ).astype(
-                    int
-                )  # NOTE: indexing is relative to the eval batch... hacky
+                ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
                 self.logs["update_representations"].append(
                     metrics["update_states"][idxs, :, :].clone()
                 )
+                self.logs["update_labels"].append(metrics["labels"][idxs].clone())
             return
 
         # Accuracy
@@ -224,12 +229,11 @@ class Handler:
                 eval_batch_size,
                 min(self.classifier.C * 30, eval_batch_size),
                 endpoint=False,
-            ).astype(
-                int
-            )  # NOTE: indexing is relative to the eval batch... hacky
+            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
             self.logs[f"{type}_representations"].append(
                 metrics["fixed_points"][idxs, :, :].clone()
             )
+            self.logs[f"{type}_labels"].append(metrics["labels"][idxs].clone())
 
         # Couplings
         if not self.skip_couplings:
@@ -342,14 +346,16 @@ class Handler:
             for type in ["update", "train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
-                ).permute(
-                    1, 0, 2, 3
-                )  # B, T, L, N
+                ).permute(1, 0, 2, 3)  # B, T, L, N
                 repr_dict = {
                     idx: repr_tensor[idx, :, :, :].cpu().numpy()
                     for idx in range(repr_tensor.shape[0])
                 }
                 self.logs[f"{type}_representations"] = repr_dict
+                labels_tensor = (
+                    torch.stack(self.logs[f"{type}_labels"], dim=0).cpu().numpy()
+                )
+                self.logs[f"{type}_labels"] = labels_tensor
 
         if not self.skip_couplings:
             for key in [
