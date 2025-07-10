@@ -24,11 +24,11 @@ from src.data import (
 )
 from src.handler import Handler
 from src.utils import (
+    handle_input_input_overlaps,
     plot_accuracy_by_class_barplot,
     plot_accuracy_history,
     plot_couplings_distro_evolution,
     plot_couplings_histograms,
-    plot_representation_similarity_among_inputs,
     plot_representations_similarity_among_layers,
 )
 
@@ -43,7 +43,7 @@ def dump_stats(output_dir, logs):
         json.dump(df, f, indent=4)
 
 
-def plot_representation_similarity(logs, save_dir, cfg):
+def log_representations(logs, save_dir, cfg):
     for representations, dirname in zip(
         [
             logs["update_representations"],
@@ -54,14 +54,19 @@ def plot_representation_similarity(logs, save_dir, cfg):
     ):
         plot_dir = os.path.join(save_dir, dirname)
         os.makedirs(plot_dir, exist_ok=True)
-        for epoch in np.linspace(
-            0, cfg.num_epochs, min(5, cfg.num_epochs), endpoint=False
-        ).astype(int):
-            fig = plot_representation_similarity_among_inputs(
-                representations, epoch, layer_skip=1
-            )
-            plt.savefig(os.path.join(plot_dir, f"epoch_{epoch}.png"))
-            plt.close(fig)
+
+        P = len(representations.keys())
+        X = np.stack([representations[p] for p in range(P)], axis=2)
+        input_input_overlaps = np.einsum("tlph,tlqh->tlpq", X, X) / X.shape[3]
+        input_labels = logs[f"{dirname}_labels"]
+        handle_input_input_overlaps(
+            input_input_overlaps / 2 + 0.5,
+            plot_dir,
+            cfg.num_epochs,
+            input_labels,
+            cfg.num_frames,
+        )
+
         for input_idx in np.random.choice(
             list(representations.keys()), 3, replace=False
         ):
@@ -272,8 +277,13 @@ def parse_config(cfg):
     except Exception:
         threshold = [cfg.threshold_hidden] * cfg.num_layers + [cfg.threshold_readout]
     assert isinstance(cfg.J_D, (float, int))
+    logging.warning(f"Adding J_D ({cfg.J_D}) to threshold")
     for i in range(cfg.num_layers):
         threshold[i] = threshold[i] + cfg.J_D
+    if cfg.inference_ignore_right == 4 and cfg.lambda_l == cfg.lambda_r:
+        logging.warning(f"Adding lambda_l ({cfg.lambda_l}) to threshold")
+        for i in range(cfg.num_layers):
+            threshold[i] = threshold[i] + cfg.lambda_l
     try:
         lambda_left = cfg.lambda_left
     except Exception:
@@ -350,6 +360,7 @@ def main(cfg):
         "symmetric_threshold_internal_couplings": cfg.symmetric_threshold_internal_couplings,
         "symmetric_update_internal_couplings": cfg.symmetric_update_internal_couplings,
         "bias_std": cfg.bias_std,
+        "inference_ignore_right": cfg.inference_ignore_right,
         "H": cfg.H,
     }
     model_cls = BatchMeIfUCan
@@ -492,7 +503,7 @@ def main(cfg):
         # Representations
         representations_root_dir = os.path.join(output_dir, "representations")
         os.makedirs(representations_root_dir, exist_ok=True)
-        plot_representation_similarity(logs, representations_root_dir, cfg)
+        log_representations(logs, representations_root_dir, cfg)
 
     # Couplings
     if not cfg.skip_couplings:
