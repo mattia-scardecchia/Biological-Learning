@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import logging
 from typing import Optional
 
 import numpy as np
@@ -9,6 +10,8 @@ import torch.nn as nn
 from torchvision import datasets, transforms
 
 from src.utils import DTYPE
+
+logger = logging.getLogger(__name__)
 
 
 class SignActivation(nn.Module):
@@ -187,6 +190,7 @@ def prepare_vision_data(
     seed,
     shuffle=True,
     project=True,
+    noise=0.0,
 ):
     torch.manual_seed(seed)
     transform = transforms.Compose(
@@ -240,6 +244,8 @@ def prepare_vision_data(
         projection_matrix = torch.randn(train_sample_size, N)
         train_images = train_images @ projection_matrix
         eval_images = eval_images @ projection_matrix
+    if not binarize and noise > 0:
+        logger.warning("binarize is false and noise > 0. skipping")
     if binarize:
         # train_median = train_images.median(dim=0, keepdim=True).values
         # eval_median = eval_images.median(dim=0, keepdim=True).values
@@ -247,6 +253,11 @@ def prepare_vision_data(
         # eval_images = torch.sign(eval_images - eval_median)
         train_images = torch.sign(train_images)
         eval_images = torch.sign(eval_images)
+        if noise > 0:
+            flip_mask_train = torch.rand_like(train_images).lt(noise)
+            flip_mask_eval = torch.rand_like(eval_images).lt(noise)
+            train_images = train_images * torch.where(flip_mask_train, -1, 1)
+            eval_images = eval_images * torch.where(flip_mask_eval, -1, 1)
     else:
         train_images = (train_images - train_images.min()) / (
             train_images.max() - train_images.min()
@@ -265,7 +276,14 @@ def prepare_vision_data(
 
 
 def prepare_mnist(
-    num_samples_train, num_samples_eval, N, binarize, seed, shuffle=True, project=True
+    num_samples_train,
+    num_samples_eval,
+    N,
+    binarize,
+    seed,
+    shuffle=True,
+    project=True,
+    noise=0.0,
 ):
     return prepare_vision_data(
         datasets.MNIST,
@@ -277,6 +295,7 @@ def prepare_mnist(
         seed,
         shuffle,
         project,
+        noise=noise,
     )
 
 
