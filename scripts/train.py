@@ -19,6 +19,8 @@ from src.data import (
     prepare_cifar,
     prepare_hm_data,
     prepare_mnist,
+    prepare_svhn,
+    prepare_fashionmnist,
 )
 from src.handler import Handler
 from src.utils import (
@@ -133,6 +135,20 @@ def get_data(cfg):
                 cfg.data.mnist.binarize,
                 cfg.seed,
                 shuffle=True,
+                noise=cfg.data.mnist.noise,
+            )
+        )
+    elif cfg.data.dataset == "fashionmnist":
+        C = 10
+        train_inputs, train_targets, eval_inputs, eval_targets, projection_matrix = (
+            prepare_fashionmnist(
+                cfg.data.P * C,
+                cfg.data.P_eval * C,
+                cfg.N,
+                cfg.data.fashionmnist.binarize,
+                cfg.seed,
+                shuffle=True,
+                project=cfg.data.fashionmnist.project,
             )
         )
     elif cfg.data.dataset == "cifar":
@@ -150,6 +166,24 @@ def get_data(cfg):
             cfg.data.cifar.binarize,
             cfg.seed,
             shuffle=True,
+        )
+    elif cfg.data.dataset == "svhn":
+        C = 10
+        (
+            train_inputs,
+            train_targets,
+            eval_inputs,
+            eval_targets,
+            projection_matrix,
+        ) = prepare_svhn(
+            cfg.data.P * C,
+            cfg.data.P_eval * C,
+            cfg.N,
+            cfg.data.svhn.binarize,
+            cfg.seed,
+            shuffle=True,
+            project=cfg.data.svhn.project,
+            grayscale=cfg.data.svhn.grayscale,
         )
     elif cfg.data.dataset == "hm":
         C = cfg.data.hm.C
