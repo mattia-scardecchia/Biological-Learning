@@ -1,0 +1,1 @@
+/home/Badalotti/Biological-Learning/multirun/emnist-baseline-reservoir/2025-06-30-12-22-54/.submitit/309287/309287_submission.sh

@@ -1,0 +1,1 @@
+/home/Badalotti/Biological-Learning/multirun/emnist-baseline-random-features/2025-06-30-12-19-05/.submitit/309281/309281_submission.sh

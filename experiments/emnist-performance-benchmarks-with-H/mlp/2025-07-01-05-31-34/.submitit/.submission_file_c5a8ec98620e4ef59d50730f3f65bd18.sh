@@ -1,0 +1,1 @@
+/home/Badalotti/Biological-Learning/multirun/mlp/2025-07-01-05-31-34/.submitit/309905/309905_submission.sh
