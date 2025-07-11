@@ -73,6 +73,7 @@ data:
   P_eval: 1500
   mnist:
     binarize: true
+    noise: 0.0
   cifar:
     binarize: true
     cifar10: true
