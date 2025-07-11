@@ -75,6 +75,7 @@ data:
     save_dir: data
   mnist:
     binarize: true
+    noise: 0.0
   cifar:
     binarize: true
     cifar10: true
