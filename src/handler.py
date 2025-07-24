@@ -211,7 +211,9 @@ class Handler:
                     eval_batch_size,
                     min(self.classifier.C * 30, eval_batch_size),
                     endpoint=False,
-                ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+                ).astype(
+                    int
+                )  # NOTE: indexing is relative to the eval batch... hacky
                 self.logs["update_representations"].append(
                     metrics["update_states"][idxs, :, :].clone()
                 )
@@ -229,7 +231,9 @@ class Handler:
                 eval_batch_size,
                 min(self.classifier.C * 30, eval_batch_size),
                 endpoint=False,
-            ).astype(int)  # NOTE: indexing is relative to the eval batch... hacky
+            ).astype(
+                int
+            )  # NOTE: indexing is relative to the eval batch... hacky
             self.logs[f"{type}_representations"].append(
                 metrics["fixed_points"][idxs, :, :].clone()
             )
@@ -327,9 +331,9 @@ class Handler:
                 f"Epoch {epoch + 1}/{num_epochs}:\n"
                 f"Full Sweeps: {np.mean(out['sweeps']):.1f}\n"
                 "Unsat after Relaxation:  "
-                f"{', '.join([format(x, '.3f') for x in (out['hidden_unsat'].tolist() + [float(out['readout_unsat'])])])}\n"
+                f"{', '.join([format(x, '.6f') for x in (out['hidden_unsat'].tolist() + [float(out['readout_unsat'])])])}\n"
                 "Perceptron Rule Updates: "
-                f"{', '.join([format(x, '.3f') for x in (out['hidden_updates'].tolist() + [float(out['readout_updates'])])])}\n"
+                f"{', '.join([format(x, '.6f') for x in (out['hidden_updates'].tolist() + [float(out['readout_updates'])])])}\n"
                 "Similarity of Representations to Inputs: \n"
                 f"   Update patterns:      {', '.join([format(x, '.2f') for x in out['similarity_to_input'].tolist()])}\n"
                 f"   Train patterns:       {', '.join([format(x, '.2f') for x in train_metrics['similarity_to_input'].tolist()])}\n"
@@ -346,7 +350,9 @@ class Handler:
             for type in ["update", "train", "eval"]:
                 repr_tensor = torch.stack(
                     self.logs[f"{type}_representations"], dim=0
-                ).permute(1, 0, 2, 3)  # B, T, L, N
+                ).permute(
+                    1, 0, 2, 3
+                )  # B, T, L, N
                 repr_dict = {
                     idx: repr_tensor[idx, :, :, :].cpu().numpy()
                     for idx in range(repr_tensor.shape[0])
