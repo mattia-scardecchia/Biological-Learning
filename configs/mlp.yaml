@@ -15,7 +15,7 @@ model:
   dropout_rate: 0.0       # Dropout probability
   beta: 1.0 # tanh temperature
   binarize: true  # If true, binarize hidden activations and use straight-through estimator for gradients
-  activation: "beta_tanh"  # Options: beta_tanh, square_tanh
+  activation: "square_tanh"  # Options: beta_tanh, square_tanh
   use_bias: false
 
 # Dataloader parameters
