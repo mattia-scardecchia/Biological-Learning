@@ -4,7 +4,10 @@ import re
 from pathlib import Path
 
 import numpy as np
+import scienceplots
 from matplotlib import pyplot as plt
+
+plt.style.use(["ieee", "science", "grid"])
 
 
 def is_value(s):
@@ -116,9 +119,7 @@ for dd in [False, True]:
     sym_inits = sorted(
         {r["symmetric_J_init"] for r in stats_rows if r["double_dynamics"] == dd}
     )
-    fig, axes = plt.subplots(
-        nrows=1, ncols=len(sym_inits), sharey=True, figsize=(16, 8)
-    )
+    fig, axes = plt.subplots(nrows=1, ncols=len(sym_inits), sharey=True, figsize=(8, 4))
     if len(sym_inits) == 1:
         axes = [axes]
     for ax, sym_init in zip(axes, sym_inits):
@@ -128,7 +129,7 @@ for dd in [False, True]:
             x = np.arange(len(r["mean_hist"]))
             mean = r["mean_hist"]
             sem = r["sem_hist"]
-            label = f"λ={r['lambda_input_skip']}, J={r['J_D']}"
+            label = f"$\lambda$={r['lambda_input_skip']}, $J_D$={r['J_D']}"
             ax.plot(
                 x,
                 mean,
@@ -137,18 +138,20 @@ for dd in [False, True]:
                 linestyle=linestyles[r["J_D"]],
             )
             ax.fill_between(x, mean - sem, mean + sem, alpha=0.3)
-        ax.set_title(f"symmetric_J_init = {sym_init}")
-        ax.set_ylabel("Symmetricity")
+        ax.set_title(f"Symmetric Initialization: {sym_init}")
+        ax.set_ylabel("Symmetricity Level")
         ax.legend()
-        ax.grid()
+        # ax.grid()
         ax.set_xlabel("Epoch")
-    fig.suptitle(
-        f"Entangle MNIST (N=100). Single hidden layer,\ndouble_dynamics = {dd}", y=0.92
-    )
+    # fig.suptitle(
+    #     f"Entangle MNIST (N=100). Single hidden layer,\ndouble_dynamics = {dd}", y=0.92
+    # )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     os.makedirs(os.path.join("figures", "symmetricity_evolution"), exist_ok=True)
     fig.savefig(
-        os.path.join("figures", "symmetricity_evolution", f"dd_{dd}.png"),
-        dpi=300,
+        os.path.join("figures", "symmetricity_evolution", f"dd_{dd}.pdf"),
+        dpi=1000,
+        format="pdf",
+        bbox_inches="tight",
     )
     plt.close(fig)

@@ -1,0 +1,1 @@
+subtract all-time mean from each frame.

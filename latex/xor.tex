@@ -1,0 +1,34 @@
+\documentclass{article}
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+\begin{document}
+
+\begin{table}[ht]
+  \noindent
+  \resizebox{\linewidth}{!}{%
+    \begin{tabular}{lrrrlllrrrr}
+      \toprule
+      algorithm & bias-std & H & max-epochs & activation & binarize & use-bias & train-acc-mean & train-acc-std & test-acc-mean & test-acc-std \\
+      \midrule
+      mlp        & NaN     & 100 & 10 & beta-tanh     & False & False & 0.530098 & 0.010630 & 0.497222 & 0.000839 \\
+      mlp        & NaN     & 100 & 10 & beta-tanh     & False & True  & 1.000000 & 0.000000 & 1.000000 & 0.000000 \\
+      mlp        & NaN     & 100 & 10 & beta-tanh     & True  & False & 0.531882 & 0.007616 & 0.498889 & 0.010839 \\
+      mlp        & NaN     & 100 & 10 & beta-tanh     & True  & True  & 1.000000 & 0.000000 & 0.999778 & 0.000192 \\
+      mlp        & NaN     & 100 & 10 & relu          & False & False & 1.000000 & 0.000000 & 1.000000 & 0.000000 \\
+      mlp        & NaN     & 100 & 10 & relu          & False & True  & 1.000000 & 0.000000 & 1.000000 & 0.000000 \\
+      mlp        & NaN     & 100 & 10 & square-tanh   & False & False & 0.540843 & 0.012927 & 0.500444 & 0.008675 \\
+      mlp        & NaN     & 100 & 10 & square-tanh   & False & True  & 1.000000 & 0.000000 & 1.000000 & 0.000000 \\
+      mlp        & NaN     & 100 & 10 & square-tanh   & True  & False & 0.523314 & 0.007342 & 0.496333 & 0.006936 \\
+      mlp        & NaN     & 100 & 10 & square-tanh   & True  & True  & 0.999980 & 0.000034 & 0.999889 & 0.000192 \\
+      ours       & 0.0     & 100 & NaN& NaN           & NaN   & NaN   & 0.508353 & 0.002023 & 0.502000 & 0.012124 \\
+      ours       & 3.0     & 100 & NaN& NaN           & NaN   & NaN   & 0.995196 & 0.002133 & 0.995778 & 0.002988 \\
+      perceptron & NaN     & NaN        & 10 & NaN           & NaN   & NaN   & 0.522902 & 0.002413 & 0.498778 & 0.004426 \\
+      \bottomrule
+    \end{tabular}
+  }
+  \caption{Xor Dataset}
+  \label{tab:results}
+\end{table}
+
+\end{document}

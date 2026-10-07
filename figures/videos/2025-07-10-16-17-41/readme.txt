@@ -1,0 +1,1 @@
+subtract instantaneous mean from each frame

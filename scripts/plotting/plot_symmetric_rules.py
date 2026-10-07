@@ -6,6 +6,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scienceplots
 
 # map method names to folders / init flags
 METHOD_MAP = {
@@ -78,7 +79,7 @@ def plot_stats(stats, final_or_max, output_dir):
                 ax.bar(x + 0.15, eval_, width=0.3, yerr=eval_e, capsize=5, label="eval")
                 ax.set_xticks(x)
                 ax.set_xticklabels(methods)
-                ax.set_title(f"$J_D$={Jval}, λₓ={lam}")
+                ax.set_title(f"$J_D$={Jval}, $\lambda_x$={lam}")
                 ax.set_yticks(np.arange(0, 1.0, 0.1), minor=True)
                 ax.grid(axis="y", linestyle="--", alpha=0.5, which="both")
 
@@ -87,7 +88,7 @@ def plot_stats(stats, final_or_max, output_dir):
                 if j == 0:
                     ax.set_ylabel(f"{final_or_max} accuracy")
 
-        plt.legend()
+        plt.legend(loc="lower right")
         fig.suptitle(
             f"Entangled MNIST (N=100). Single hidden layer,\ndouble_dynamics = {dd}",
             y=0.95,
@@ -120,6 +121,7 @@ def main(base_dir, final_or_max):
     df = pd.concat(dfs, ignore_index=True)
     stats = compute_stats(df, final_or_max)
     output_dir = os.path.join("figures", "symmetric_rules")
+    plt.style.use(["ieee", "science", "grid"])
     plot_stats(stats, final_or_max, output_dir)
 
 
